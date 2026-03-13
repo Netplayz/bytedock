@@ -1,0 +1,28 @@
+{
+  "name": "Python App",
+  "author": "panel@netbyte.local",
+  "description": "Generic Python application. Installs requirements.txt if present, then runs your script.",
+  "icon": "fa-snake",
+  "color": "amber",
+  "docker_images": {
+    "Python 3.12 Slim": "python:3.12-slim",
+    "Python 3.11 Slim": "python:3.11-slim",
+    "Python 3.12 Alpine": "python:3.12-alpine"
+  },
+  "startup": "cd /app && [ -f requirements.txt ] && pip install -r requirements.txt -q; python {{ENTRY_FILE}}",
+  "config": {
+    "stop": null,
+    "startup_done": null
+  },
+  "default_ports": [],
+  "default_volumes": [],
+  "variables": [
+    {
+      "name": "Entry File",
+      "description": "The Python file to run.",
+      "env_variable": "ENTRY_FILE",
+      "default_value": "main.py",
+      "field_type": "text"
+    }
+  ]
+}

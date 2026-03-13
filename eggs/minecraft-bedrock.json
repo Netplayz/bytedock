@@ -1,0 +1,56 @@
+{
+  "name": "Minecraft Bedrock",
+  "author": "panel@netbyte.local",
+  "description": "Minecraft Bedrock Edition server using the itzg/minecraft-bedrock-server image.",
+  "icon": "fa-cube",
+  "color": "amber",
+  "docker_images": {
+    "Latest": "itzg/minecraft-bedrock-server:latest"
+  },
+  "startup": "",
+  "config": {
+    "stop": "stop",
+    "startup_done": "Server started"
+  },
+  "default_ports": ["19132:19132/udp"],
+  "default_volumes": [],
+  "variables": [
+    {
+      "name": "Server Name",
+      "description": "The name of the server shown in the server list.",
+      "env_variable": "SERVER_NAME",
+      "default_value": "Bedrock Server",
+      "field_type": "text"
+    },
+    {
+      "name": "Gamemode",
+      "description": "Default gamemode.",
+      "env_variable": "GAMEMODE",
+      "default_value": "survival",
+      "field_type": "select",
+      "options": ["survival", "creative", "adventure"]
+    },
+    {
+      "name": "Difficulty",
+      "description": "Game difficulty.",
+      "env_variable": "DIFFICULTY",
+      "default_value": "normal",
+      "field_type": "select",
+      "options": ["peaceful", "easy", "normal", "hard"]
+    },
+    {
+      "name": "Max Players",
+      "description": "Maximum number of players.",
+      "env_variable": "MAX_PLAYERS",
+      "default_value": "20",
+      "field_type": "text"
+    },
+    {
+      "name": "EULA",
+      "description": "Accept the Minecraft EULA.",
+      "env_variable": "EULA",
+      "default_value": "TRUE",
+      "field_type": "text"
+    }
+  ]
+}

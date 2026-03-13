@@ -1,0 +1,81 @@
+{
+  "name": "Minecraft Java",
+  "author": "panel@netbyte.local",
+  "description": "Minecraft Java Edition server. Supports Paper, Spigot, Vanilla, and Forge via the itzg/minecraft-server image.",
+  "icon": "fa-cube",
+  "color": "emerald",
+  "docker_images": {
+    "Java 21 (Recommended)": "itzg/minecraft-server:java21",
+    "Java 17": "itzg/minecraft-server:java17",
+    "Java 11": "itzg/minecraft-server:java11",
+    "Latest": "itzg/minecraft-server:latest"
+  },
+  "startup": "",
+  "config": {
+    "stop": "stop",
+    "startup_done": "Done"
+  },
+  "default_ports": ["25565:25565"],
+  "default_volumes": [],
+  "variables": [
+    {
+      "name": "Server Type",
+      "description": "The type of Minecraft server to run.",
+      "env_variable": "TYPE",
+      "default_value": "PAPER",
+      "field_type": "select",
+      "options": ["PAPER", "SPIGOT", "VANILLA", "FORGE", "FABRIC", "PURPUR"]
+    },
+    {
+      "name": "Minecraft Version",
+      "description": "The Minecraft version to run. Use LATEST for the latest version.",
+      "env_variable": "VERSION",
+      "default_value": "LATEST",
+      "field_type": "text"
+    },
+    {
+      "name": "Max Memory (MB)",
+      "description": "Maximum RAM allocated to the server in megabytes.",
+      "env_variable": "MEMORY",
+      "default_value": "2048",
+      "field_type": "text"
+    },
+    {
+      "name": "Max Players",
+      "description": "Maximum number of players allowed on the server.",
+      "env_variable": "MAX_PLAYERS",
+      "default_value": "20",
+      "field_type": "text"
+    },
+    {
+      "name": "Difficulty",
+      "description": "Game difficulty.",
+      "env_variable": "DIFFICULTY",
+      "default_value": "normal",
+      "field_type": "select",
+      "options": ["peaceful", "easy", "normal", "hard"]
+    },
+    {
+      "name": "Gamemode",
+      "description": "Default gamemode for new players.",
+      "env_variable": "MODE",
+      "default_value": "survival",
+      "field_type": "select",
+      "options": ["survival", "creative", "adventure", "spectator"]
+    },
+    {
+      "name": "MOTD",
+      "description": "Message of the Day shown in the server list.",
+      "env_variable": "MOTD",
+      "default_value": "A Minecraft Server",
+      "field_type": "text"
+    },
+    {
+      "name": "EULA",
+      "description": "Accept the Minecraft EULA. Must be TRUE to run.",
+      "env_variable": "EULA",
+      "default_value": "TRUE",
+      "field_type": "text"
+    }
+  ]
+}

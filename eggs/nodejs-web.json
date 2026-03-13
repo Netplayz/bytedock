@@ -1,0 +1,44 @@
+{
+  "name": "Node.js Web App",
+  "author": "panel@netbyte.local",
+  "description": "A generic Node.js web application or API server. Runs npm install then starts your entry file.",
+  "icon": "fa-globe",
+  "color": "violet",
+  "docker_images": {
+    "Node 20 LTS": "node:20-slim",
+    "Node 18 LTS": "node:18-slim",
+    "Node 22": "node:22-slim",
+    "Node 20 Alpine": "node:20-alpine"
+  },
+  "startup": "cd /app && npm install --silent && node {{ENTRY_FILE}}",
+  "config": {
+    "stop": null,
+    "startup_done": "listening"
+  },
+  "default_ports": ["3000:3000"],
+  "default_volumes": [],
+  "variables": [
+    {
+      "name": "Entry File",
+      "description": "The main JS file to run.",
+      "env_variable": "ENTRY_FILE",
+      "default_value": "index.js",
+      "field_type": "text"
+    },
+    {
+      "name": "Port",
+      "description": "Port the app listens on inside the container.",
+      "env_variable": "PORT",
+      "default_value": "3000",
+      "field_type": "text"
+    },
+    {
+      "name": "Node Environment",
+      "description": "Node environment setting.",
+      "env_variable": "NODE_ENV",
+      "default_value": "production",
+      "field_type": "select",
+      "options": ["production", "development"]
+    }
+  ]
+}
