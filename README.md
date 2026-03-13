@@ -51,7 +51,7 @@ sudo usermod -aG docker $USER && newgrp docker
 ### Install & Run
 
 ```bash
-git clone https://github.com/netplayz/home-server-management
+gh repo clone Netplayz/home-server-management
 cd home-server-management
 chmod +x start.sh && ./start.sh
 ```
