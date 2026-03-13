@@ -1,0 +1,16 @@
+{
+  "name": "Custom Docker",
+  "author": "panel@netbyte.local",
+  "description": "Run any Docker image. You supply the image name and optional startup command.",
+  "icon": "fa-box",
+  "color": "gray",
+  "docker_images": {},
+  "startup": "",
+  "config": {
+    "stop": null,
+    "startup_done": null
+  },
+  "default_ports": [],
+  "default_volumes": [],
+  "variables": []
+}
