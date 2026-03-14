@@ -249,8 +249,13 @@ home-server-management/
 
 GPL 3.0 
 
-Built with the assistance of 
-` Claude Sonnet 4.6 extended `
+
 ---
 
 *Built by [NetByte](https://github.com/netplayz)*
+*With the assistance of [Claude Sonnet 4.5] (https://www.anthropic.com/news/claude-sonnet-4-5)*
+*Inspired by WispByte, thank you David Dobos*
+
+
+
+
