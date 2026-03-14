@@ -193,9 +193,9 @@ Then: `sudo certbot --nginx -d panel.yourdomain.com`
 ### Run as a systemd service
 
 ```bash
-sudo tee /etc/systemd/system/home-panel.service > /dev/null <<EOF
+sudo tee /etc/systemd/system/bytedock.service > /dev/null <<EOF
 [Unit]
-Description=Home Server Management
+Description=bytedock
 After=docker.service
 Requires=docker.service
 
