@@ -26,8 +26,6 @@ Built for personal use. No cloud dependency, no accounts, no bloat.
 |---|---|
 | Minecraft Java | `itzg/minecraft-server` (Paper, Spigot, Fabric, Forge, Vanilla) |
 | Minecraft Bedrock | `itzg/minecraft-bedrock-server` |
-| Discord Bot (Python) | `python:3.12-slim` |
-| Discord Bot (Node.js) | `node:20-slim` |
 | Node.js Web App | `node:20-slim` |
 | Python App | `python:3.12-slim` |
 | Custom Docker | any image |
