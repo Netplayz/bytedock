@@ -1499,7 +1499,7 @@ function fmRender(){
   if(fmView==='grid'){
     body.innerHTML=`<div class="fm-grid">${list.map(e=>{
       const {cls,icon}=fmGetIcon(e);
-      const colors={fei-dir:'#fbbf24','fei-code':'#818cf8','fei-img':'#34d399','fei-archive':'#f87171','fei-file':'var(--dim)'};
+      const colors={'fei-dir':'#fbbf24','fei-code':'#818cf8','fei-img':'#34d399','fei-archive':'#f87171','fei-file':'var(--dim)'};
       const c=colors[cls]||'var(--dim)';
       const ep=fmPath?`${fmPath}/${e.name}`:e.name;
       return `<div class="fm-grid-entry" onclick="${e.type==='dir'?`fmLoad('${ep.replace(/'/g,"\\'")}')`:fmIsEditable(e.name)?`fmEdit('${ep.replace(/'/g,"\\'")}')`:''}" ondblclick="fmEntryDblClick(event,'${ep.replace(/'/g,"\\'")}','${e.type}')">
