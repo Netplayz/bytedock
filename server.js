@@ -228,8 +228,9 @@ async function createContainer(id, cfg) {
   cfg.dataDir = dataDir;   // persist so the UI can display it
   pushLog(id, `Data directory: ${dataDir}`, 'info');
 
-  // Prepend the auto-mount; user-specified volumes still apply on top
-  const autoMount = `${dataDir}:/data`;
+  // Mount at /app so egg startup commands (cd /app && ...) work out of the box.
+  // Also keep any user-specified volumes.
+  const autoMount = `${dataDir}:/app`;
   const userVolumes = (cfg.volumes || []).filter(v => !v.startsWith(dataDir));
   const allBinds = [autoMount, ...userVolumes];
 
@@ -245,6 +246,7 @@ async function createContainer(id, cfg) {
     AttachStderr: true,
     OpenStdin: true,
     Tty: false,
+    WorkingDir: '/app',
     HostConfig: {
       PortBindings: portBindings,
       Binds: allBinds,
