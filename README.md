@@ -230,8 +230,6 @@ home-server-management/
 ├── eggs/              # Egg template JSON files
 │   ├── minecraft-java.json
 │   ├── minecraft-bedrock.json
-│   ├── discord-bot-python.json
-│   ├── discord-bot-nodejs.json
 │   ├── nodejs-web.json
 │   ├── python-app.json
 │   └── custom.json
@@ -251,7 +249,7 @@ home-server-management/
 
 ## 📄 License
 
-GPL 3.0 — do whatever you want with it.
+GPL 3.0 
 
 ---
 
