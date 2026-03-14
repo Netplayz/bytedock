@@ -1,6 +1,6 @@
 {
   "name": "Node.js Web App",
-  "author": "panel@netbyte.local",
+  "author": "panel@bytedock.local",
   "description": "A generic Node.js web application or API server. Runs npm install then starts your entry file.",
   "icon": "fa-globe",
   "color": "violet",

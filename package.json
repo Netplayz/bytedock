@@ -1,7 +1,7 @@
 {
-  "name": "home-server-panel",
+  "name": "bytedock",
   "version": "2.1.0",
-  "description": "Home Server Management — Docker Edition",
+  "description": "bytedock — Docker Edition",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

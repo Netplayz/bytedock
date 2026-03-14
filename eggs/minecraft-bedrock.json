@@ -1,6 +1,6 @@
 {
   "name": "Minecraft Bedrock",
-  "author": "panel@netbyte.local",
+  "author": "panel@bytedock.local",
   "description": "Minecraft Bedrock Edition server using the itzg/minecraft-bedrock-server image.",
   "icon": "fa-cube",
   "color": "amber",

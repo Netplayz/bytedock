@@ -1,6 +1,6 @@
 {
   "name": "Discord Bot (Python)",
-  "author": "panel@netbyte.local",
+  "author": "panel@bytedock.local",
   "description": "A Python-based Discord bot. Installs requirements.txt automatically and runs your main bot file.",
   "icon": "fa-robot",
   "color": "indigo",

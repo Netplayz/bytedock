@@ -1,6 +1,6 @@
 {
   "name": "Minecraft Java",
-  "author": "panel@netbyte.local",
+  "author": "panel@bytedock.local",
   "description": "Minecraft Java Edition server. Supports Paper, Spigot, Vanilla, and Forge via the itzg/minecraft-server image.",
   "icon": "fa-cube",
   "color": "emerald",

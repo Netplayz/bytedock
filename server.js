@@ -878,8 +878,8 @@ config.servers.forEach(initServer);
 
 server.listen(config.panel.port, config.panel.host, async () => {
   console.log('\n  ┌─────────────────────────────────────┐');
-  console.log(`  │  Home Server Management  v2.1        │`);
-  console.log(`  │  http://localhost:${config.panel.port}              │`);
-  console.log('  └─────────────────────────────────────┘\n');
+  console.log(`    │  bytedock  v2.1                     │`);
+  console.log(`    │http://localhost:${config.panel.port}│`);
+  console.log('    └─────────────────────────────────────┘\n');
   await syncContainerStatuses();
 });

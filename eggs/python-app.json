@@ -1,6 +1,6 @@
 {
   "name": "Python App",
-  "author": "panel@netbyte.local",
+  "author": "panel@bytedock.local",
   "description": "Generic Python application. Installs requirements.txt if present, then runs your script.",
   "icon": "fa-snake",
   "color": "amber",

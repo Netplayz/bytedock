@@ -1,6 +1,6 @@
 {
   "name": "Discord Bot (Node.js)",
-  "author": "panel@netbyte.local",
+  "author": "panel@bytedock.local",
   "description": "A Node.js Discord bot using discord.js. Runs npm install then starts your entry file.",
   "icon": "fa-robot",
   "color": "indigo",

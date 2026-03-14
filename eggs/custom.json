@@ -1,6 +1,6 @@
 {
   "name": "Custom Docker",
-  "author": "panel@netbyte.local",
+  "author": "panel@bytedock.local",
   "description": "Run any Docker image. You supply the image name and optional startup command.",
   "icon": "fa-box",
   "color": "gray",
