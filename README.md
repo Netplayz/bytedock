@@ -1,4 +1,4 @@
-# 🖥️ Home Server Management
+# 🖥️ ByteDock
 
 A personal self-hosted server management panel powered by **Docker**. Deploy and manage containers using **Pterodactyl-style egg templates** — all from a clean, dark web UI.
 
