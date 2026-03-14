@@ -254,7 +254,7 @@ GPL 3.0
 
 *Built by [NetByte](https://github.com/netplayz)*
 
-*With the assistance of [Claude Sonnet 4.5] (https://www.anthropic.com/news/claude-sonnet-4-5)*
+*With the assistance of [Claude Sonnet 4.5](https://www.anthropic.com/news/claude-sonnet-4-5)*
 
 *Inspired by WispByte, thank you David Dobos*
 
