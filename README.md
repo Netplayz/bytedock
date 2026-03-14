@@ -1,4 +1,4 @@
-# 🖥️ ByteDock
+#  ByteDock
 
 A personal self-hosted server management panel powered by **Docker**. Deploy and manage containers using **Pterodactyl-style egg templates** — all from a clean, dark web UI.
 
@@ -6,7 +6,7 @@ Built for personal use. No cloud dependency, no accounts, no bloat.
 
 ---
 
-## ✨ Features
+##  Features
 
 - **Docker-native** — containers are created, started, stopped, and deleted via the Docker API
 - **Egg templates** — Pterodactyl-compatible eggs define images, env variables, ports, and startup commands
@@ -20,7 +20,7 @@ Built for personal use. No cloud dependency, no accounts, no bloat.
 
 ---
 
-## 📦 Built-in Eggs
+##  Built-in Eggs
 
 | Egg | Image |
 |---|---|
@@ -36,7 +36,7 @@ You can import additional eggs from the [Pterodactyl community eggs repo](https:
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Requirements
 
@@ -69,7 +69,7 @@ Default password: `changeme` — change it in `config.json` before exposing to a
 
 ---
 
-## ⚙️ Configuration
+##  Configuration
 
 Edit `config.json` before starting:
 
@@ -88,7 +88,7 @@ Servers are added and saved automatically through the UI. The `servers` array is
 
 ---
 
-## 🥚 Adding Eggs
+##  Adding Eggs
 
 ### From the UI (recommended)
 
@@ -137,7 +137,7 @@ Drop any egg `.json` file into the `eggs/` folder and restart the panel. It will
 
 ---
 
-## 🐳 Docker Notes
+##  Docker Notes
 
 ### Container naming
 
@@ -168,7 +168,7 @@ Set a value in MB to cap container RAM. Leave `0` for no limit.
 
 ---
 
-## 🔒 Security
+##  Security
 
 - Change `password` in `config.json` from the default `changeme`
 - Bind to `127.0.0.1` and use a reverse proxy (Nginx + Certbot) for HTTPS if exposing externally
@@ -219,7 +219,7 @@ sudo systemctl enable --now home-panel
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 home-server-management/
