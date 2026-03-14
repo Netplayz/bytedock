@@ -441,7 +441,7 @@ Returns all egg templates loaded from the `eggs/` directory.
   {
     "_id": "minecraft-java",
     "name": "Minecraft Java",
-    "author": "panel@netbyte.local",
+    "author": "panel@bytedock.local",
     "description": "Minecraft Java Edition server.",
     "icon": "fa-cube",
     "color": "emerald",
