@@ -51,7 +51,7 @@ sudo usermod -aG docker $USER && newgrp docker
 ### Install & Run
 
 ```bash
-gh repo clone Netplayz/bytedock
+git clone https://github.com/Netplayz/bytedock.git
 cd bytedock
 chmod +x start.sh && ./start.sh
 ```
