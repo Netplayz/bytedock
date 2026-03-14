@@ -237,7 +237,7 @@ home-server-management/
 
 ---
 
-## 🛠️ Stack
+## Stack
 
 - **Backend** — Node.js, Express, `ws`, `dockerode`, `systeminformation`
 - **Frontend** — Vanilla HTML/CSS/JS, Inter + JetBrains Mono, Font Awesome 6
@@ -245,10 +245,12 @@ home-server-management/
 
 ---
 
-## 📄 License
+## License
 
 GPL 3.0 
 
+Built with the assistance of 
+` Claude Sonnet 4.6 extended `
 ---
 
 *Built by [NetByte](https://github.com/netplayz)*
