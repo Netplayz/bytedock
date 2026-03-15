@@ -1,0 +1,118 @@
+{
+  "name": "Minecraft Fabric + Crossplay + playit.gg",
+  "author": "panel@bytedock.local",
+  "description": "Fabric server with Geyser + Floodgate for Bedrock/Java crossplay, and playit.gg tunnel support. Auto-installs everything on first boot. Java players connect on port 25565, Bedrock on 19132/UDP.",
+  "icon": "fa-cube",
+  "color": "violet",
+  "docker_images": {
+    "Java 21 — Minecraft 1.21.x": "eclipse-temurin:21-jre",
+    "Java 17 — Minecraft 1.20.x": "eclipse-temurin:17-jre",
+    "Java 11 — Minecraft 1.18.x and below": "eclipse-temurin:11-jre"
+  },
+  "startup": "#!/bin/bash\n\n# ── playit.gg agent ──────────────────────────────────────────────\nif [ ! -f playit ]; then\n  echo \"[bytedock] Downloading playit.gg agent...\"\n  ARCH=$(uname -m)\n  if [ \"$ARCH\" = \"aarch64\" ] || [ \"$ARCH\" = \"arm64\" ]; then\n    curl -sSL -o playit https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux-aarch64\n  else\n    curl -sSL -o playit https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux-amd64\n  fi\n  chmod +x playit\nfi\n\nif [ -n \"{{PLAYIT_SECRET}}\" ]; then\n  echo \"[bytedock] Starting playit.gg tunnel...\"\n  PLAYIT_SECRET_KEY=\"{{PLAYIT_SECRET}}\" ./playit run --secret-key \"{{PLAYIT_SECRET}}\" &\nelse\n  echo \"[bytedock] PLAYIT_SECRET not set — tunnel disabled.\"\nfi\n\n# ── Fabric installer ─────────────────────────────────────────────\nif [ ! -f fabric-server-launch.jar ]; then\n  echo \"[bytedock] Downloading Fabric installer {{FABRIC_INSTALLER_VERSION}}...\"\n  curl -sSL -o fabric-installer.jar \\\n    \"https://maven.fabricmc.net/net/fabricmc/fabric-installer/{{FABRIC_INSTALLER_VERSION}}/fabric-installer-{{FABRIC_INSTALLER_VERSION}}.jar\"\n  echo \"[bytedock] Installing Fabric {{FABRIC_LOADER_VERSION}} for Minecraft {{MC_VERSION}}...\"\n  java -jar fabric-installer.jar server \\\n    -mcversion \"{{MC_VERSION}}\" \\\n    -loader \"{{FABRIC_LOADER_VERSION}}\" \\\n    -downloadMinecraft \\\n    -dir .\n  rm -f fabric-installer.jar\n  echo \"[bytedock] Fabric install complete.\"\nfi\n\n# ── Geyser + Floodgate mods ──────────────────────────────────────\nmkdir -p mods\n\nif [ ! -f mods/Geyser-Fabric.jar ]; then\n  echo \"[bytedock] Downloading Geyser-Fabric...\"\n  curl -sSL -o mods/Geyser-Fabric.jar \\\n    \"https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/fabric\"\nfi\n\nif [ ! -f mods/Floodgate-Fabric.jar ]; then\n  echo \"[bytedock] Downloading Floodgate-Fabric...\"\n  curl -sSL -o mods/Floodgate-Fabric.jar \\\n    \"https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/fabric\"\nfi\n\n# ── Geyser config ────────────────────────────────────────────────\nmkdir -p config/Geyser-Fabric\nif [ ! -f config/Geyser-Fabric/config.yml ]; then\n  echo \"[bytedock] Writing Geyser config...\"\n  cat > config/Geyser-Fabric/config.yml <<EOF\nbedrock:\n  address: 0.0.0.0\n  port: {{BEDROCK_PORT}}\n  clone-remote-port: false\n  motd1: \"{{MOTD}}\"\n  motd2: \"Powered by Geyser\"\n  server-name: \"{{MOTD}}\"\n\nremote:\n  address: 127.0.0.1\n  port: {{SERVER_PORT}}\n  auth-type: floodgate\n\nfloodgate-key-file: key.pem\n\nallow-third-party-capes: true\nshow-cooldown: title\nEOF\nfi\n\n# ── EULA ─────────────────────────────────────────────────────────\necho 'eula=true' > eula.txt\n\n# ── server.properties ────────────────────────────────────────────\nif [ ! -f server.properties ]; then\n  cat > server.properties <<EOF\nserver-port={{SERVER_PORT}}\nmax-players={{MAX_PLAYERS}}\nmotd={{MOTD}}\nonline-mode={{ONLINE_MODE}}\ndifficulty={{DIFFICULTY}}\ngamemode={{GAMEMODE}}\nlevel-name=world\nEOF\nfi\n\n# ── Launch ───────────────────────────────────────────────────────\necho \"[bytedock] Launching Fabric {{MC_VERSION}} (Java: {{SERVER_PORT}}, Bedrock: {{BEDROCK_PORT}}/UDP)...\"\nexec java \\\n  -Xms{{MIN_RAM}}M -Xmx{{MAX_RAM}}M \\\n  -XX:+UseG1GC \\\n  -XX:+ParallelRefProcEnabled \\\n  -XX:MaxGCPauseMillis=200 \\\n  -XX:+UnlockExperimentalVMOptions \\\n  -XX:+DisableExplicitGC \\\n  -XX:G1NewSizePercent=30 \\\n  -XX:G1MaxNewSizePercent=40 \\\n  -XX:G1HeapRegionSize=8M \\\n  -XX:G1ReservePercent=20 \\\n  -XX:G1HeapWastePercent=5 \\\n  -XX:G1MixedGCCountTarget=4 \\\n  -XX:InitiatingHeapOccupancyPercent=15 \\\n  -XX:G1MixedGCLiveThresholdPercent=90 \\\n  -XX:G1RSetUpdatingPauseTimePercent=5 \\\n  -XX:SurvivorRatio=32 \\\n  -XX:+PerfDisableSharedMem \\\n  -XX:MaxTenuringThreshold=1 \\\n  -jar fabric-server-launch.jar nogui",
+  "config": {
+    "stop": "stop",
+    "startup_done": "Done"
+  },
+  "default_ports": [
+    "25565:25565",
+    "19132:19132/udp"
+  ],
+  "default_volumes": [],
+  "variables": [
+    {
+      "name": "Minecraft Version",
+      "description": "The Minecraft version to run. Check https://fabricmc.net/develop/ for supported versions.",
+      "env_variable": "MC_VERSION",
+      "default_value": "1.21.4",
+      "field_type": "text"
+    },
+    {
+      "name": "Fabric Loader Version",
+      "description": "Fabric Loader version. Get the latest from https://fabricmc.net/develop/",
+      "env_variable": "FABRIC_LOADER_VERSION",
+      "default_value": "0.16.10",
+      "field_type": "text"
+    },
+    {
+      "name": "Fabric Installer Version",
+      "description": "Fabric Installer version. Check https://maven.fabricmc.net/net/fabricmc/fabric-installer/",
+      "env_variable": "FABRIC_INSTALLER_VERSION",
+      "default_value": "1.0.1",
+      "field_type": "text"
+    },
+    {
+      "name": "playit.gg Secret Key",
+      "description": "Your playit.gg agent secret key. Leave blank to disable the tunnel. Note: you will need two playit tunnels — one TCP (Java) and one UDP (Bedrock). Get yours at https://playit.gg",
+      "env_variable": "PLAYIT_SECRET",
+      "default_value": "",
+      "field_type": "text"
+    },
+    {
+      "name": "Java Port",
+      "description": "Port Java Edition players connect on (TCP). Must match the port mapping.",
+      "env_variable": "SERVER_PORT",
+      "default_value": "25565",
+      "field_type": "text"
+    },
+    {
+      "name": "Bedrock Port",
+      "description": "Port Bedrock Edition players connect on (UDP). Must match the UDP port mapping.",
+      "env_variable": "BEDROCK_PORT",
+      "default_value": "19132",
+      "field_type": "text"
+    },
+    {
+      "name": "Min RAM (MB)",
+      "description": "Minimum Java heap size (-Xms) in megabytes.",
+      "env_variable": "MIN_RAM",
+      "default_value": "1024",
+      "field_type": "text"
+    },
+    {
+      "name": "Max RAM (MB)",
+      "description": "Maximum Java heap size (-Xmx) in megabytes. Geyser needs extra headroom — 2GB+ recommended.",
+      "env_variable": "MAX_RAM",
+      "default_value": "2048",
+      "field_type": "text"
+    },
+    {
+      "name": "Max Players",
+      "description": "Maximum concurrent players (Java + Bedrock combined).",
+      "env_variable": "MAX_PLAYERS",
+      "default_value": "20",
+      "field_type": "text"
+    },
+    {
+      "name": "MOTD",
+      "description": "Message shown in both the Java and Bedrock server lists.",
+      "env_variable": "MOTD",
+      "default_value": "A NetByte Crossplay Server",
+      "field_type": "text"
+    },
+    {
+      "name": "Online Mode",
+      "description": "Java Edition auth. With Floodgate installed, Bedrock players always bypass this regardless.",
+      "env_variable": "ONLINE_MODE",
+      "default_value": "true",
+      "field_type": "select",
+      "options": ["true", "false"]
+    },
+    {
+      "name": "Difficulty",
+      "description": "Server difficulty.",
+      "env_variable": "DIFFICULTY",
+      "default_value": "normal",
+      "field_type": "select",
+      "options": ["peaceful", "easy", "normal", "hard"]
+    },
+    {
+      "name": "Gamemode",
+      "description": "Default gamemode for all players.",
+      "env_variable": "GAMEMODE",
+      "default_value": "survival",
+      "field_type": "select",
+      "options": ["survival", "creative", "adventure", "spectator"]
+    }
+  ]
+}
