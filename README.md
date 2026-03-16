@@ -232,6 +232,7 @@ home-server-management/
 │   ├── python-app.json
 │   ├── minecraft-crossplay-playit.json
 │   └── custom.json
+│   └── minecraft-crossplay-playit.json
 └── public/
     └── index.html     # Single-file frontend
 ```
