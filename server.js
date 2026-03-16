@@ -30,7 +30,6 @@ let config = loadConfig();
 // Where per-container host directories live — defaults to <project>/data/<server-id>
 function getDataRoot() {
   const raw = config.panel.dataRoot || path.join(__dirname, 'data');
-  // Expand ~ or relative paths
   if (raw.startsWith('~')) return path.join(os.homedir(), raw.slice(1));
   if (!path.isAbsolute(raw)) return path.join(__dirname, raw);
   return raw;
@@ -61,8 +60,20 @@ function loadEggs() {
     .filter(Boolean);
 }
 
+// Return the container-side data path for a given egg id (defaults to /app)
+function getEggDataPath(eggId) {
+  if (!eggId) return '/app';
+  try {
+    const file = path.join(eggsPath, `${eggId}.json`);
+    if (fs.existsSync(file)) {
+      const egg = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (egg.data_path) return egg.data_path;
+    }
+  } catch {}
+  return '/app';
+}
+
 // ── STATE ──
-// id → { status, logs, startedAt, stdinStream, cfg, isRestarting }
 const processes = {};
 const activityLog = [];
 
@@ -109,31 +120,27 @@ function pushActivity(message, color = 'blue') {
 }
 
 // ── TAR HELPER ──
-// Creates a valid tar archive buffer from an array of { name, buffer } objects.
 function filesToTar(files) {
   const parts = [];
 
   for (const { name, buffer } of files) {
-    // Sanitise filename — strip any leading slashes / path traversal
     const safeName = name.replace(/^\/+/, '').replace(/\.\.\//g, '').slice(0, 99);
     const header = Buffer.alloc(512);
 
     Buffer.from(safeName).copy(header, 0);
-    Buffer.from('0000644\0').copy(header, 100);  // mode
-    Buffer.from('0000000\0').copy(header, 108);  // uid
-    Buffer.from('0000000\0').copy(header, 116);  // gid
-    Buffer.from(buffer.length.toString(8).padStart(11, '0') + '\0').copy(header, 124);  // size
-    Buffer.from(Math.floor(Date.now() / 1000).toString(8).padStart(11, '0') + '\0').copy(header, 136);  // mtime
-    Buffer.from('        ').copy(header, 148);   // checksum placeholder (8 spaces)
-    header[156] = 0x30;                          // type '0' = regular file
-    Buffer.from('ustar  \0').copy(header, 257);  // magic
+    Buffer.from('0000644\0').copy(header, 100);
+    Buffer.from('0000000\0').copy(header, 108);
+    Buffer.from('0000000\0').copy(header, 116);
+    Buffer.from(buffer.length.toString(8).padStart(11, '0') + '\0').copy(header, 124);
+    Buffer.from(Math.floor(Date.now() / 1000).toString(8).padStart(11, '0') + '\0').copy(header, 136);
+    Buffer.from('        ').copy(header, 148);
+    header[156] = 0x30;
+    Buffer.from('ustar  \0').copy(header, 257);
 
-    // Calculate checksum (treating checksum field as spaces)
     let chk = 0;
     for (let i = 0; i < 512; i++) chk += header[i];
     Buffer.from(chk.toString(8).padStart(6, '0') + '\0 ').copy(header, 148);
 
-    // Pad file content to a multiple of 512 bytes
     const paddedSize = Math.ceil(buffer.length / 512) * 512;
     const content = Buffer.alloc(paddedSize);
     buffer.copy(content);
@@ -141,7 +148,6 @@ function filesToTar(files) {
     parts.push(header, content);
   }
 
-  // End-of-archive marker: two 512-byte zero blocks
   parts.push(Buffer.alloc(1024));
   return Buffer.concat(parts);
 }
@@ -195,7 +201,6 @@ function parsePortBindings(ports) {
 async function getContainer(cfg) {
   const name = `hsm-${cfg.id}`;
 
-  // Try by stored container ID
   if (cfg.containerId) {
     try {
       const c = docker.getContainer(cfg.containerId);
@@ -204,7 +209,6 @@ async function getContainer(cfg) {
     } catch { cfg.containerId = null; }
   }
 
-  // Try by name
   try {
     const c = docker.getContainer(name);
     const info = await c.inspect();
@@ -223,14 +227,17 @@ async function createContainer(id, cfg) {
   const env = Object.entries(cfg.env || {}).map(([k, v]) => `${k}=${v}`);
   const { portBindings, exposedPorts } = parsePortBindings(cfg.ports);
 
-  // ── Auto data directory in user's home ──
+  // ── Auto data directory ──
   const dataDir = ensureServerDataDir(cfg.id);
-  cfg.dataDir = dataDir;   // persist so the UI can display it
+  cfg.dataDir = dataDir;
   pushLog(id, `Data directory: ${dataDir}`, 'info');
 
-  // Mount at /app so egg startup commands (cd /app && ...) work out of the box.
-  // Also keep any user-specified volumes.
-  const autoMount = `${dataDir}:/app`;
+  // Resolve which path inside the container this egg uses for its data.
+  // e.g. itzg/minecraft-server expects /data; generic Node/Python apps use /app.
+  const containerDataPath = getEggDataPath(cfg.egg);
+  pushLog(id, `Container data path: ${containerDataPath}`, 'info');
+
+  const autoMount = `${dataDir}:${containerDataPath}`;
   const userVolumes = (cfg.volumes || []).filter(v => !v.startsWith(dataDir));
   const allBinds = [autoMount, ...userVolumes];
 
@@ -246,7 +253,7 @@ async function createContainer(id, cfg) {
     AttachStderr: true,
     OpenStdin: true,
     Tty: false,
-    WorkingDir: '/app',
+    WorkingDir: containerDataPath,
     HostConfig: {
       PortBindings: portBindings,
       Binds: allBinds,
@@ -259,7 +266,6 @@ async function createContainer(id, cfg) {
 
   const container = await docker.createContainer(opts);
 
-  // Update cfg in-place so config.servers is also updated (same object reference)
   cfg.containerId = container.id;
   saveConfig(config);
   return container;
@@ -282,10 +288,7 @@ function attachLogStream(id, container) {
     stream.on('end', () => {
       const state = processes[id];
       if (!state) return;
-
-      // Skip offline transition if we're in the middle of a manual restart
       if (state.isRestarting) return;
-
       if (state.status === 'offline') return;
       state.status = 'offline';
       state.stdinStream = null;
@@ -396,15 +399,11 @@ async function restartServer(id) {
   try {
     const container = await getContainer(state.cfg);
     if (container) {
-      // Flag as restarting so the log stream 'end' handler doesn't fire auto-restart
       state.isRestarting = true;
-
       await container.restart({ t: 10 });
-
       state.status = 'online';
       state.startedAt = Date.now();
       state.isRestarting = false;
-
       broadcast({ event: 'status', id, status: 'online' });
       attachLogStream(id, container);
       await attachStdin(id, container);
@@ -463,7 +462,6 @@ async function uploadFilesToContainer(id, files, destPath) {
 
   let container = await getContainer(state.cfg);
   if (!container) {
-    // Container hasn't been created yet — create it without starting
     pushLog(id, 'Container not yet created — creating it to allow file upload...', 'info');
     try {
       container = await createContainer(id, state.cfg);
@@ -481,7 +479,7 @@ async function uploadFilesToContainer(id, files, destPath) {
   return { ok: true, count: files.length, path: destPath };
 }
 
-// ── CONTAINER STATS (per container) ──
+// ── CONTAINER STATS ──
 
 async function updateContainerStats() {
   for (const [id, state] of Object.entries(processes)) {
@@ -500,7 +498,6 @@ async function updateContainerStats() {
         ? Math.round((cpuDelta / sysDelta) * numCPU * 100 * 10) / 10
         : 0;
 
-      // cgroup v1 uses memory_stats.stats.cache, cgroup v2 may not expose it
       const cache   = stats.memory_stats?.stats?.cache || stats.memory_stats?.stats?.inactive_file || 0;
       const memUsed  = Math.max(0, (stats.memory_stats?.usage || 0) - cache);
       const memLimit = stats.memory_stats?.limit || 0;
@@ -508,7 +505,7 @@ async function updateContainerStats() {
 
       state.containerStats = { cpu, memUsed, memLimit, memPct };
       broadcast({ event: 'container_stats', id, stats: state.containerStats });
-    } catch { /* container may have been removed */ }
+    } catch {}
   }
 }
 
@@ -641,14 +638,14 @@ app.post('/api/servers/:id/stop',        auth, async (req, res) => res.json(awai
 app.post('/api/servers/:id/restart',     auth, async (req, res) => res.json(await restartServer(req.params.id)));
 app.post('/api/servers/:id/command',     auth, (req, res) => res.json(sendCommand(req.params.id, req.body.command)));
 
-// ── FILE UPLOAD ──
+// ── FILE UPLOAD INTO CONTAINER ──
 app.post('/api/servers/:id/upload', auth, upload.array('files'), async (req, res) => {
   const { id } = req.params;
   if (!processes[id]) return res.status(404).json({ error: 'Server not found' });
   if (!req.files || !req.files.length)
     return res.status(400).json({ error: 'No files provided' });
 
-  const destPath = (req.body.path || '/app').trim() || '/app';
+  const destPath = (req.body.path || '/data').trim() || '/data';
   const files = req.files.map(f => ({
     name: f.originalname,
     buffer: f.buffer,
@@ -666,7 +663,6 @@ app.post('/api/servers/:id/upload', auth, upload.array('files'), async (req, res
 
 // ── FILE MANAGER ROUTES ──
 
-// Resolve and validate a path inside a server's data directory
 function resolveDataPath(serverId, rel) {
   const base = getServerDataDir(serverId);
   const resolved = path.resolve(base, rel || '.');
@@ -674,7 +670,6 @@ function resolveDataPath(serverId, rel) {
   return { base, resolved };
 }
 
-// GET /api/servers/:id/files?path=subdir  — list directory
 app.get('/api/servers/:id/files', auth, (req, res) => {
   const { id } = req.params;
   if (!processes[id]) return res.status(404).json({ error: 'Server not found' });
@@ -698,7 +693,6 @@ app.get('/api/servers/:id/files', auth, (req, res) => {
       };
     }).filter(Boolean);
 
-    // Relative path from base for the breadcrumb
     const relPath = path.relative(base, resolved) || '';
     res.json({ ok: true, path: relPath, entries });
   } catch (err) {
@@ -706,7 +700,6 @@ app.get('/api/servers/:id/files', auth, (req, res) => {
   }
 });
 
-// GET /api/servers/:id/files/read?path=file.txt  — read file contents
 app.get('/api/servers/:id/files/read', auth, (req, res) => {
   const { id } = req.params;
   if (!processes[id]) return res.status(404).json({ error: 'Server not found' });
@@ -722,7 +715,6 @@ app.get('/api/servers/:id/files/read', auth, (req, res) => {
   }
 });
 
-// POST /api/servers/:id/files/write  — write file contents
 app.post('/api/servers/:id/files/write', auth, (req, res) => {
   const { id } = req.params;
   if (!processes[id]) return res.status(404).json({ error: 'Server not found' });
@@ -736,7 +728,6 @@ app.post('/api/servers/:id/files/write', auth, (req, res) => {
   }
 });
 
-// POST /api/servers/:id/files/mkdir  — create directory
 app.post('/api/servers/:id/files/mkdir', auth, (req, res) => {
   const { id } = req.params;
   if (!processes[id]) return res.status(404).json({ error: 'Server not found' });
@@ -749,7 +740,6 @@ app.post('/api/servers/:id/files/mkdir', auth, (req, res) => {
   }
 });
 
-// POST /api/servers/:id/files/rename  — rename/move
 app.post('/api/servers/:id/files/rename', auth, (req, res) => {
   const { id } = req.params;
   if (!processes[id]) return res.status(404).json({ error: 'Server not found' });
@@ -764,7 +754,6 @@ app.post('/api/servers/:id/files/rename', auth, (req, res) => {
   }
 });
 
-// DELETE /api/servers/:id/files  — delete file or directory
 app.delete('/api/servers/:id/files', auth, (req, res) => {
   const { id } = req.params;
   if (!processes[id]) return res.status(404).json({ error: 'Server not found' });
@@ -777,7 +766,6 @@ app.delete('/api/servers/:id/files', auth, (req, res) => {
   }
 });
 
-// POST /api/servers/:id/files/upload  — upload files into a directory
 app.post('/api/servers/:id/files/upload', auth, upload.array('files'), (req, res) => {
   const { id } = req.params;
   if (!processes[id]) return res.status(404).json({ error: 'Server not found' });
@@ -795,7 +783,6 @@ app.post('/api/servers/:id/files/upload', auth, upload.array('files'), (req, res
   }
 });
 
-// GET /api/servers/:id/files/download?path=file.txt  — download a file
 app.get('/api/servers/:id/files/download', auth, (req, res) => {
   const { id } = req.params;
   if (!processes[id]) return res.status(404).json({ error: 'Server not found' });
@@ -867,7 +854,6 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => clients.delete(ws));
 });
 
-// Broadcast system stats every 3 s, container stats every 5 s
 setInterval(async () => {
   try { broadcast({ event: 'stats', stats: await getSystemStats() }); } catch {}
 }, 3000);
