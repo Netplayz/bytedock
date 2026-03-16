@@ -3,7 +3,7 @@
   "author": "panel@bytedock.local",
   "description": "Fabric server with Geyser + Floodgate for Bedrock/Java crossplay, and playit.gg tunnel support. Auto-installs everything on first boot. Java players connect on port 25565, Bedrock on 19132/UDP.",
   "icon": "fa-cube",
-  "color": "violet",
+  "color": "amber",
   "docker_images": {
     "Java 21 — Minecraft 1.21.x": "eclipse-temurin:21-jre",
     "Java 17 — Minecraft 1.20.x": "eclipse-temurin:17-jre",
@@ -24,14 +24,14 @@
       "name": "Minecraft Version",
       "description": "The Minecraft version to run. Check https://fabricmc.net/develop/ for supported versions.",
       "env_variable": "MC_VERSION",
-      "default_value": "1.21.4",
+      "default_value": "1.21.11",
       "field_type": "text"
     },
     {
       "name": "Fabric Loader Version",
       "description": "Fabric Loader version. Get the latest from https://fabricmc.net/develop/",
       "env_variable": "FABRIC_LOADER_VERSION",
-      "default_value": "0.16.10",
+      "default_value": "0.18.4",
       "field_type": "text"
     },
     {
@@ -66,14 +66,14 @@
       "name": "Min RAM (MB)",
       "description": "Minimum Java heap size (-Xms) in megabytes.",
       "env_variable": "MIN_RAM",
-      "default_value": "1024",
+      "default_value": "1024M",
       "field_type": "text"
     },
     {
       "name": "Max RAM (MB)",
       "description": "Maximum Java heap size (-Xmx) in megabytes. Geyser needs extra headroom — 2GB+ recommended.",
       "env_variable": "MAX_RAM",
-      "default_value": "2048",
+      "default_value": "2048M",
       "field_type": "text"
     },
     {
@@ -87,7 +87,7 @@
       "name": "MOTD",
       "description": "Message shown in both the Java and Bedrock server lists.",
       "env_variable": "MOTD",
-      "default_value": "A NetByte Crossplay Server",
+      "default_value": "A Bytedock Crossplay Server",
       "field_type": "text"
     },
     {
