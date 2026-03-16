@@ -230,6 +230,7 @@ home-server-management/
 │   ├── minecraft-bedrock.json
 │   ├── nodejs-web.json
 │   ├── python-app.json
+│   ├── minecraft-crossplay-playit.json
 │   └── custom.json
 └── public/
     └── index.html     # Single-file frontend
