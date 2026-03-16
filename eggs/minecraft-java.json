@@ -37,7 +37,7 @@
       "name": "Max Memory (MB)",
       "description": "Maximum RAM allocated to the server in megabytes.",
       "env_variable": "MEMORY",
-      "default_value": "2048",
+      "default_value": "2048M",
       "field_type": "text"
     },
     {
