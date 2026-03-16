@@ -4,6 +4,7 @@
   "description": "Minecraft Bedrock Edition server using the itzg/minecraft-bedrock-server image.",
   "icon": "fa-cube",
   "color": "amber",
+  "data_path": "/data",
   "docker_images": {
     "Latest": "itzg/minecraft-bedrock-server:latest"
   },

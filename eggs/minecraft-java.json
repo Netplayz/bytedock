@@ -4,6 +4,7 @@
   "description": "Minecraft Java Edition server. Supports Paper, Spigot, Vanilla, and Forge via the itzg/minecraft-server image.",
   "icon": "fa-cube",
   "color": "emerald",
+  "data_path": "/data",
   "docker_images": {
     "Java 21 (Recommended)": "itzg/minecraft-server:java21",
     "Java 17": "itzg/minecraft-server:java17",
