@@ -1,0 +1,98 @@
+{
+  "name": "frp Auto-Setup (SSH + Tunnel)",
+  "author": "panel@bytedock.local",
+  "description": "Automatically SSHes into your DigitalOcean droplet, installs and configures frps, opens the required ports, then starts frpc locally to tunnel your Minecraft server. All you need is your DO droplet IP, SSH credentials, and an auth token.",
+  "icon": "fa-terminal",
+  "color": "indigo",
+  "docker_images": {
+    "Ubuntu 24.04": "ubuntu:24.04"
+  },
+  "startup": "#!/bin/bash\n\napt-get update -qq && apt-get install -y -qq curl wget tar openssh-client ufw > /dev/null\n\nFRP_VERSION=\"{{FRP_VERSION}}\"\nDO_IP=\"{{DO_IP}}\"\nSSH_USER=\"{{SSH_USER}}\"\nSSH_PORT=\"{{SSH_PORT}}\"\nFRP_TOKEN=\"{{FRP_TOKEN}}\"\nFRP_BIND_PORT=\"{{FRP_BIND_PORT}}\"\nJAVA_REMOTE_PORT=\"{{JAVA_REMOTE_PORT}}\"\nBEDROCK_REMOTE_PORT=\"{{BEDROCK_REMOTE_PORT}}\"\nJAVA_LOCAL_PORT=\"{{JAVA_LOCAL_PORT}}\"\nBEDROCK_LOCAL_PORT=\"{{BEDROCK_LOCAL_PORT}}\"\nLOCAL_IP=\"{{LOCAL_IP}}\"\n\n# ── SSH key setup ─────────────────────────────────────────────────\nmkdir -p ~/.ssh && chmod 700 ~/.ssh\n\nif [ ! -f ~/.ssh/do_key ]; then\n  if [ -f /data/do_key ]; then\n    cp /data/do_key ~/.ssh/do_key\n    chmod 600 ~/.ssh/do_key\n    echo \"[bytedock] SSH key loaded from /data/do_key.\"\n  else\n    echo \"[bytedock] ERROR: No SSH key found.\"\n    echo \"[bytedock]   → Generate a key pair: ssh-keygen -t ed25519 -f do_key\"\n    echo \"[bytedock]   → Add do_key.pub to your DO droplet: ssh-copy-id -i do_key.pub ${SSH_USER}@${DO_IP}\"\n    echo \"[bytedock]   → Upload the private key (do_key) to this server's /data/ folder.\"\n    exit 1\n  fi\nfi\n\n# Trust the DO host automatically\nssh-keyscan -p \"${SSH_PORT}\" -H \"${DO_IP}\" >> ~/.ssh/known_hosts 2>/dev/null\n\nSSH=\"ssh -i ~/.ssh/do_key -p ${SSH_PORT} -o StrictHostKeyChecking=no ${SSH_USER}@${DO_IP}\"\n\necho \"[bytedock] Testing SSH connection to ${DO_IP}...\"\nif ! $SSH 'echo ok' > /dev/null 2>&1; then\n  echo \"[bytedock] ERROR: SSH connection failed. Check your DO_IP, SSH_USER, SSH_PORT, and that do_key is uploaded.\"\n  exit 1\nfi\necho \"[bytedock] SSH connection OK.\"\n\n# ── Set up frps on the DO droplet ────────────────────────────────\necho \"[bytedock] Setting up frps on DO droplet...\"\n$SSH bash <<ENDSSH\n  set -e\n\n  # Install frps if not present\n  if [ ! -f /usr/local/bin/frps ]; then\n    echo \"[do] Downloading frp ${FRP_VERSION}...\"\n    ARCH=\\$(uname -m)\n    if [ \"\\$ARCH\" = \"aarch64\" ] || [ \"\\$ARCH\" = \"arm64\" ]; then\n      FRP_ARCH=\"arm64\"\n    else\n      FRP_ARCH=\"amd64\"\n    fi\n    FRP_DIR=\"frp_${FRP_VERSION}_linux_\\${FRP_ARCH}\"\n    wget -qO /tmp/frp.tar.gz \\\n      \"https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/\\${FRP_DIR}.tar.gz\"\n    tar -xzf /tmp/frp.tar.gz -C /tmp\n    mv /tmp/\\${FRP_DIR}/frps /usr/local/bin/frps\n    chmod +x /usr/local/bin/frps\n    rm -rf /tmp/frp.tar.gz /tmp/\\${FRP_DIR}\n    echo \"[do] frps installed.\"\n  else\n    echo \"[do] frps already installed, skipping download.\"\n  fi\n\n  # Write frps config\n  mkdir -p /etc/frp\n  cat > /etc/frp/frps.toml <<EOF\nbindPort = ${FRP_BIND_PORT}\nauth.method = \"token\"\nauth.token = \"${FRP_TOKEN}\"\nEOF\n  echo \"[do] frps config written.\"\n\n  # Open ports with ufw if available\n  if command -v ufw &> /dev/null; then\n    ufw allow ${FRP_BIND_PORT}/tcp > /dev/null 2>&1 || true\n    ufw allow ${JAVA_REMOTE_PORT}/tcp > /dev/null 2>&1 || true\n    ufw allow ${BEDROCK_REMOTE_PORT}/udp > /dev/null 2>&1 || true\n    echo \"[do] ufw rules added.\"\n  fi\n\n  # Install systemd service\n  cat > /etc/systemd/system/frps.service <<EOF\n[Unit]\nDescription=frp server\nAfter=network.target\n\n[Service]\nExecStart=/usr/local/bin/frps -c /etc/frp/frps.toml\nRestart=always\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target\nEOF\n\n  systemctl daemon-reload\n  systemctl enable frps\n  systemctl restart frps\n  echo \"[do] frps service started.\"\nENDSSH\n\necho \"[bytedock] DO droplet setup complete.\"\n\n# ── Download frpc locally ────────────────────────────────────────\nif [ ! -f frpc ]; then\n  echo \"[bytedock] Downloading frpc locally...\"\n  ARCH=$(uname -m)\n  if [ \"$ARCH\" = \"aarch64\" ] || [ \"$ARCH\" = \"arm64\" ]; then\n    FRP_ARCH=\"arm64\"\n  else\n    FRP_ARCH=\"amd64\"\n  fi\n  FRP_DIR=\"frp_${FRP_VERSION}_linux_${FRP_ARCH}\"\n  wget -qO frp.tar.gz \\\n    \"https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_DIR}.tar.gz\"\n  tar -xzf frp.tar.gz\n  mv ${FRP_DIR}/frpc ./frpc\n  rm -rf frp.tar.gz ${FRP_DIR}\n  chmod +x frpc\n  echo \"[bytedock] frpc ready.\"\nfi\n\n# ── Write frpc config ────────────────────────────────────────────\ncat > frpc.toml <<EOF\nserverAddr = \"${DO_IP}\"\nserverPort = ${FRP_BIND_PORT}\nauth.method = \"token\"\nauth.token = \"${FRP_TOKEN}\"\n\n[[proxies]]\nname = \"mc-java\"\ntype = \"tcp\"\nlocalIP = \"${LOCAL_IP}\"\nlocalPort = ${JAVA_LOCAL_PORT}\nremotePort = ${JAVA_REMOTE_PORT}\n\n[[proxies]]\nname = \"mc-bedrock\"\ntype = \"udp\"\nlocalIP = \"${LOCAL_IP}\"\nlocalPort = ${BEDROCK_LOCAL_PORT}\nremotePort = ${BEDROCK_REMOTE_PORT}\nEOF\n\necho \"[bytedock] frpc config written.\"\necho \"[bytedock] Connecting tunnel to ${DO_IP}:${FRP_BIND_PORT}...\"\necho \"[bytedock] Java:    ${LOCAL_IP}:${JAVA_LOCAL_PORT} → DO:${JAVA_REMOTE_PORT}\"\necho \"[bytedock] Bedrock: ${LOCAL_IP}:${BEDROCK_LOCAL_PORT} → DO:${BEDROCK_REMOTE_PORT} (UDP)\"\n\nexec ./frpc -c frpc.toml",
+  "config": {
+    "stop": null,
+    "startup_done": "start proxy success"
+  },
+  "default_ports": [],
+  "default_volumes": [
+    "/data"
+  ],
+  "variables": [
+    {
+      "name": "DigitalOcean Droplet IP",
+      "description": "Your DO droplet's public IP address.",
+      "env_variable": "DO_IP",
+      "default_value": "",
+      "field_type": "text"
+    },
+    {
+      "name": "SSH User",
+      "description": "SSH username on your DO droplet. Usually 'root' for fresh droplets.",
+      "env_variable": "SSH_USER",
+      "default_value": "root",
+      "field_type": "text"
+    },
+    {
+      "name": "SSH Port",
+      "description": "SSH port on your DO droplet.",
+      "env_variable": "SSH_PORT",
+      "default_value": "22",
+      "field_type": "text"
+    },
+    {
+      "name": "frp Auth Token",
+      "description": "A strong secret shared between frps and frpc. Make this unique.",
+      "env_variable": "FRP_TOKEN",
+      "default_value": "",
+      "field_type": "text"
+    },
+    {
+      "name": "frp Control Port",
+      "description": "Port frps listens on for tunnel connections (must be open on DO firewall).",
+      "env_variable": "FRP_BIND_PORT",
+      "default_value": "7000",
+      "field_type": "text"
+    },
+    {
+      "name": "frp Version",
+      "description": "frp release version. Check https://github.com/fatedier/frp/releases for latest.",
+      "env_variable": "FRP_VERSION",
+      "default_value": "0.61.1",
+      "field_type": "text"
+    },
+    {
+      "name": "Local Server IP",
+      "description": "LAN IP of your Minecraft server. Use 127.0.0.1 if on the same machine as ByteDock.",
+      "env_variable": "LOCAL_IP",
+      "default_value": "127.0.0.1",
+      "field_type": "text"
+    },
+    {
+      "name": "Java Local Port",
+      "description": "Java Edition port on your local machine.",
+      "env_variable": "JAVA_LOCAL_PORT",
+      "default_value": "25565",
+      "field_type": "text"
+    },
+    {
+      "name": "Java Remote Port",
+      "description": "Java Edition port exposed on your DO droplet.",
+      "env_variable": "JAVA_REMOTE_PORT",
+      "default_value": "25565",
+      "field_type": "text"
+    },
+    {
+      "name": "Bedrock Local Port",
+      "description": "Bedrock Edition port on your local machine (UDP).",
+      "env_variable": "BEDROCK_LOCAL_PORT",
+      "default_value": "19132",
+      "field_type": "text"
+    },
+    {
+      "name": "Bedrock Remote Port",
+      "description": "Bedrock Edition port exposed on your DO droplet (UDP).",
+      "env_variable": "BEDROCK_REMOTE_PORT",
+      "default_value": "19132",
+      "field_type": "text"
+    }
+  ]
+}
