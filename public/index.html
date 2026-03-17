@@ -306,6 +306,45 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex
 .editor-modal{width:720px;max-width:98vw;}
 .code-editor{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:12px;color:#a3e6a5;font-family:var(--mono);font-size:12px;line-height:1.7;outline:none;resize:vertical;min-height:340px;tab-size:2;}
 .code-editor:focus{border-color:var(--primary);}
+/* MOD FINDER */
+.mod-modal{width:780px;max-width:98vw;}
+.mod-source-tabs{display:flex;gap:2px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:3px;margin-bottom:16px;}
+.mod-tab{flex:1;padding:7px;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;color:var(--dim);text-align:center;transition:all 0.15s;border:none;background:none;}
+.mod-tab.active{background:rgba(79,70,229,0.2);color:#a5b4fc;}
+.mod-tab.cf.active{background:rgba(245,158,11,0.15);color:#fbbf24;}
+.mod-filters{display:flex;gap:8px;margin-bottom:14px;align-items:center;}
+.mod-search-inp{flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:9px 13px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none;transition:border-color 0.15s;}
+.mod-search-inp:focus{border-color:var(--primary);}
+.mod-filter-sel{background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;outline:none;cursor:pointer;min-width:100px;}
+.mod-filter-sel:focus{border-color:var(--primary);}
+.mod-search-btn{padding:8px 18px;border-radius:8px;background:var(--primary);color:#fff;border:none;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.mod-search-btn:hover{opacity:0.9;}
+.mod-search-btn:disabled{opacity:0.5;cursor:default;}
+.mod-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;max-height:420px;overflow-y:auto;padding-right:4px;}
+.mod-card{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px;transition:border-color 0.15s;}
+.mod-card:hover{border-color:var(--border2);}
+.mod-card-head{display:flex;gap:9px;align-items:flex-start;}
+.mod-card-icon{width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;background:rgba(255,255,255,0.07);}
+.mod-card-icon-fallback{width:38px;height:38px;border-radius:8px;background:rgba(79,70,229,0.15);display:flex;align-items:center;justify-content:center;font-size:16px;color:#818cf8;flex-shrink:0;}
+.mod-card-title{font-size:12.5px;font-weight:600;line-height:1.3;}
+.mod-card-author{font-size:10.5px;color:var(--dim);}
+.mod-card-desc{font-size:11px;color:rgba(246,246,246,0.6);line-height:1.5;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;}
+.mod-card-footer{display:flex;align-items:center;justify-content:space-between;margin-top:auto;}
+.mod-card-dl{font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;align-items:center;gap:4px;}
+.mod-card-tags{display:flex;gap:4px;flex-wrap:wrap;}
+.mod-card-tag{font-size:9.5px;padding:1px 6px;border-radius:3px;background:rgba(79,70,229,0.12);color:#818cf8;border:1px solid rgba(79,70,229,0.2);}
+.mod-install-btn{font-size:11px;padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.1);color:#34d399;border:1px solid rgba(16,185,129,0.25);cursor:pointer;font-weight:600;white-space:nowrap;transition:all 0.15s;}
+.mod-install-btn:hover{background:rgba(16,185,129,0.2);}
+.mod-install-btn:disabled{opacity:0.5;cursor:default;}
+.mod-install-btn.installing{color:#fbbf24;border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.08);}
+.mod-install-btn.done{color:#818cf8;border-color:rgba(79,70,229,0.3);background:rgba(79,70,229,0.1);}
+.mod-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:52px 20px;gap:12px;color:var(--dim);font-size:13px;text-align:center;}
+.mod-dest-row{display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;margin-bottom:14px;font-size:12.5px;}
+.mod-dest-row i{color:var(--dim);font-size:11px;}
+.mod-dest-inp{flex:1;background:none;border:none;outline:none;font-family:var(--mono);font-size:12px;color:var(--text);}
+.mod-cf-notice{background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:10px 14px;font-size:12px;color:rgba(246,246,246,0.7);margin-bottom:12px;line-height:1.6;}
+.mod-cf-notice a{color:#fbbf24;text-decoration:none;}
+.mod-cf-notice a:hover{text-decoration:underline;}
 </style>
 </head>
 <body>
@@ -457,6 +496,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex
           <span style="color:var(--dim2);font-size:11px;">Select a container to browse files</span>
         </div>
         <div class="fm-actions" id="fm-actions" style="display:none;">
+          <button class="btn btn-ghost btn-sm" onclick="openModModal()" style="background:rgba(99,102,241,0.1);color:#a5b4fc;border-color:rgba(99,102,241,0.3);" title="Search & install mods from Modrinth or CurseForge"><i class="fa-solid fa-puzzle-piece"></i> Find Mods</button>
           <button class="btn btn-ghost btn-sm" onclick="fmCreateFile()"><i class="fa-solid fa-file-circle-plus"></i> Create File</button>
           <button class="btn btn-ghost btn-sm" onclick="fmUploadClick()"><i class="fa-solid fa-upload"></i> Upload Files</button>
           <label class="btn btn-ghost btn-sm" title="Upload Folder (experimental)" style="cursor:pointer;position:relative;">
@@ -544,6 +584,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex
           <option value="gray">Gray</option>
         </select>
       </div>
+    </div>
+
+    <div class="field" style="margin-top:14px;">
+      <label class="field-label">Startup Command Override <small style="color:var(--dim);font-weight:400;">(overrides egg default — leave blank to use egg's command)</small></label>
+      <input class="inp mono" id="f-startup-override" placeholder="e.g. java -Xmx4G -jar server.jar nogui"/>
+      <div class="field-hint">Supports <code style="font-size:10px;background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">{{ENV_VAR}}</code> substitution.</div>
+    </div>
+
+    <div class="checkbox-row" style="margin-bottom:4px;">
+      <input type="checkbox" id="f-gpu"/>
+      <label for="f-gpu" style="display:flex;align-items:center;gap:7px;">
+        <span>Enable GPU passthrough</span>
+        <span style="font-family:var(--mono);font-size:9px;background:rgba(139,92,246,0.2);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);padding:1px 6px;border-radius:4px;">NVIDIA · requires nvidia-container-toolkit</span>
+      </label>
     </div>
 
     <hr class="divider">
@@ -693,6 +747,69 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeRenameModal()">Cancel</button>
       <button class="btn btn-primary" onclick="confirmRename()">Rename</button>
+    </div>
+  </div>
+</div>
+
+<!-- MOD FINDER MODAL -->
+<div class="overlay" id="mod-modal" onclick="if(event.target===this)closeModModal()">
+  <div class="modal mod-modal">
+    <div class="modal-title"><i class="fa-solid fa-puzzle-piece" style="color:#818cf8;font-size:16px;margin-right:8px;"></i>Find &amp; Install Mods</div>
+    <div class="modal-sub" id="mod-modal-sub">Search Modrinth or CurseForge and install mods directly into your container's data directory.</div>
+
+    <!-- Destination path -->
+    <div class="mod-dest-row">
+      <i class="fa-solid fa-folder-open"></i>
+      <span style="color:var(--dim);font-size:11.5px;white-space:nowrap;">Install to:</span>
+      <input class="mod-dest-inp" id="mod-dest-path" value="mods" placeholder="mods"/>
+      <span style="color:var(--dim2);font-family:var(--mono);font-size:10px;white-space:nowrap;">(relative to container data dir)</span>
+    </div>
+
+    <!-- Source tabs -->
+    <div class="mod-source-tabs">
+      <button class="mod-tab active" id="mod-tab-modrinth" onclick="modSwitchSource('modrinth')">
+        <i class="fa-solid fa-leaf" style="color:#34d399;margin-right:5px;"></i>Modrinth
+        <span style="font-size:9px;background:rgba(16,185,129,0.15);color:#34d399;padding:1px 5px;border-radius:3px;margin-left:5px;font-weight:700;">FREE</span>
+      </button>
+      <button class="mod-tab cf" id="mod-tab-curseforge" onclick="modSwitchSource('curseforge')">
+        <i class="fa-solid fa-fire" style="color:#f97316;margin-right:5px;"></i>CurseForge
+        <span style="font-size:9px;background:rgba(249,115,22,0.15);color:#f97316;padding:1px 5px;border-radius:3px;margin-left:5px;font-weight:700;">KEY REQ</span>
+      </button>
+    </div>
+
+    <!-- CurseForge notice -->
+    <div class="mod-cf-notice hidden" id="mod-cf-notice">
+      <i class="fa-solid fa-key" style="color:#fbbf24;margin-right:6px;"></i>
+      CurseForge requires an API key. Add <code style="font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">"curseforgeApiKey": "YOUR_KEY"</code> inside the <code style="font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">"panel"</code> object in <code style="font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">config.json</code>, then restart ByteDock.
+      <a href="https://console.curseforge.com/" target="_blank" style="margin-left:6px;">Get a key →</a>
+    </div>
+
+    <!-- Search filters -->
+    <div class="mod-filters">
+      <input class="mod-search-inp" id="mod-search-inp" placeholder="Search mods…" onkeydown="if(event.key==='Enter')modSearch()"/>
+      <select class="mod-filter-sel" id="mod-loader-filter">
+        <option value="">Any loader</option>
+        <option value="fabric">Fabric</option>
+        <option value="forge">Forge</option>
+        <option value="neoforge">NeoForge</option>
+        <option value="quilt">Quilt</option>
+        <option value="bukkit">Bukkit/Paper</option>
+      </select>
+      <input class="mod-filter-sel" id="mod-version-filter" placeholder="MC version" style="min-width:110px;" value=""/>
+      <button class="mod-search-btn" id="mod-search-btn" onclick="modSearch()"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
+    </div>
+
+    <!-- Results -->
+    <div id="mod-results-wrap">
+      <div class="mod-empty" id="mod-empty-state">
+        <i class="fa-solid fa-puzzle-piece" style="font-size:32px;opacity:0.2;"></i>
+        <span>Search for mods to get started</span>
+      </div>
+      <div class="mod-results hidden" id="mod-results"></div>
+    </div>
+
+    <div class="modal-footer" style="margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeModModal()">Close</button>
     </div>
   </div>
 </div>
@@ -1114,17 +1231,20 @@ function openEditModal(id){
   document.getElementById('f-memory').value=s.memory||'';
   document.getElementById('f-stopcmd').value=s.stopCommand||'';
   document.getElementById('f-startup-manual').value=s.startup||'';
+  document.getElementById('f-startup-override').value=s.startupOverride||'';
   document.getElementById('f-autorestart').checked=!!s.autoRestart;
+  document.getElementById('f-gpu').checked=!!s.gpu;
   document.getElementById('add-modal').classList.add('open');
 }
 
 function closeAddModal(){document.getElementById('add-modal').classList.remove('open');selectedEgg=null;}
 
 function clearForm(){
-  ['f-name','f-image','f-ports','f-volumes','f-memory','f-stopcmd','f-image-manual','f-startup-manual']
+  ['f-name','f-image','f-ports','f-volumes','f-memory','f-stopcmd','f-image-manual','f-startup-manual','f-startup-override']
     .forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   document.getElementById('f-color').value='indigo';
   document.getElementById('f-autorestart').checked=false;
+  document.getElementById('f-gpu').checked=false;
   document.getElementById('f-image-hint').textContent='';
   document.getElementById('egg-vars-section').classList.add('hidden');
   document.getElementById('egg-vars').innerHTML='';
@@ -1135,6 +1255,8 @@ async function saveServer(){
   const color=document.getElementById('f-color').value;
   const stopcmd=document.getElementById('f-stopcmd').value.trim();
   const autorestart=document.getElementById('f-autorestart').checked;
+  const gpu=document.getElementById('f-gpu').checked;
+  const startupOverride=document.getElementById('f-startup-override').value.trim();
   const memory=parseInt(document.getElementById('f-memory').value)||0;
   const ports=(document.getElementById('f-ports').value).split(',').map(p=>p.trim()).filter(Boolean);
   const volumes=(document.getElementById('f-volumes').value).split(',').map(v=>v.trim()).filter(Boolean);
@@ -1171,6 +1293,8 @@ async function saveServer(){
     memory:memory||0,
     stopCommand:stopcmd||null,
     autoRestart:autorestart,
+    gpu,
+    startupOverride:startupOverride||null,
     icon:selectedEgg?selectedEgg.icon:icon,
     egg:selectedEgg?selectedEgg._id:null,
   };
@@ -1391,6 +1515,158 @@ function timeAgo(ts){
 }
 function esc(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── MOD FINDER ──
+let modSource = 'modrinth';
+
+function openModModal() {
+  if (!fmServerId) { toast('Select a container in File Manager first', 'error'); return; }
+  const srv = servers.find(s => s.id === fmServerId);
+  document.getElementById('mod-modal-sub').textContent =
+    srv ? `Installing into: ${srv.name}` : 'Install mods into the selected container.';
+  document.getElementById('mod-modal').classList.add('open');
+}
+function closeModModal() { document.getElementById('mod-modal').classList.remove('open'); }
+
+function modSwitchSource(src) {
+  modSource = src;
+  document.getElementById('mod-tab-modrinth').className = 'mod-tab' + (src === 'modrinth' ? ' active' : '');
+  document.getElementById('mod-tab-curseforge').className = 'mod-tab cf' + (src === 'curseforge' ? ' active' : '');
+  document.getElementById('mod-cf-notice').classList.toggle('hidden', src !== 'curseforge');
+  document.getElementById('mod-results').classList.add('hidden');
+  document.getElementById('mod-empty-state').classList.remove('hidden');
+}
+
+async function modSearch() {
+  const q = document.getElementById('mod-search-inp').value.trim();
+  const loader = document.getElementById('mod-loader-filter').value;
+  const version = document.getElementById('mod-version-filter').value.trim();
+  const btn = document.getElementById('mod-search-btn');
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Searching…';
+
+  document.getElementById('mod-empty-state').classList.add('hidden');
+  document.getElementById('mod-results').classList.add('hidden');
+  document.getElementById('mod-results').innerHTML = '';
+
+  try {
+    const params = new URLSearchParams({ q, source: modSource });
+    if (loader) params.set('loader', loader);
+    if (version) params.set('version', version);
+    const res = await api('GET', `/api/mods/search?${params}`);
+
+    if (!res.ok) {
+      document.getElementById('mod-empty-state').innerHTML =
+        `<i class="fa-solid fa-triangle-exclamation" style="font-size:28px;color:var(--red);opacity:0.6;"></i><span style="color:var(--red);">${esc(res.error)}</span>`;
+      document.getElementById('mod-empty-state').classList.remove('hidden');
+      return;
+    }
+
+    if (!res.mods.length) {
+      document.getElementById('mod-empty-state').innerHTML =
+        '<i class="fa-solid fa-magnifying-glass" style="font-size:28px;opacity:0.2;"></i><span>No mods found. Try a different search.</span>';
+      document.getElementById('mod-empty-state').classList.remove('hidden');
+      return;
+    }
+
+    const grid = document.getElementById('mod-results');
+    grid.innerHTML = res.mods.map(m => modCard(m)).join('');
+    grid.classList.remove('hidden');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Search';
+  }
+}
+
+function modCard(m) {
+  const dlFmt = m.downloads >= 1e6 ? (m.downloads/1e6).toFixed(1)+'M' : m.downloads >= 1e3 ? (m.downloads/1e3).toFixed(0)+'K' : String(m.downloads||0);
+  const iconHtml = m.icon
+    ? `<img class="mod-card-icon" src="${esc(m.icon)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+       <div class="mod-card-icon-fallback" style="display:none;"><i class="fa-solid fa-puzzle-piece"></i></div>`
+    : `<div class="mod-card-icon-fallback"><i class="fa-solid fa-puzzle-piece"></i></div>`;
+  const tags = (m.categories||[]).slice(0,3).map(c=>`<span class="mod-card-tag">${esc(c)}</span>`).join('');
+  const encodedId = encodeURIComponent(m.id);
+  const encodedName = encodeURIComponent(m.name);
+  const encodedSlug = encodeURIComponent(m.slug||m.id);
+  return `<div class="mod-card" id="modcard-${esc(m.id)}">
+    <div class="mod-card-head">
+      ${iconHtml}
+      <div style="min-width:0;">
+        <div class="mod-card-title">${esc(m.name)}</div>
+        <div class="mod-card-author">by ${esc(m.author||'unknown')}</div>
+      </div>
+    </div>
+    <div class="mod-card-desc">${esc(m.description||'')}</div>
+    <div class="mod-card-footer">
+      <div>
+        <div class="mod-card-tags">${tags}</div>
+        <div class="mod-card-dl" style="margin-top:4px;"><i class="fa-solid fa-download" style="font-size:9px;"></i> ${dlFmt}</div>
+      </div>
+      <button class="mod-install-btn" id="modbtn-${esc(m.id)}"
+        onclick="modInstall('${encodedId}','${encodedName}','${encodedSlug}','${esc(m.source)}',this)">
+        <i class="fa-solid fa-plus"></i> Install
+      </button>
+    </div>
+  </div>`;
+}
+
+async function modInstall(encodedId, encodedName, encodedSlug, source, btn) {
+  const id = decodeURIComponent(encodedId);
+  const name = decodeURIComponent(encodedName);
+  const loader = document.getElementById('mod-loader-filter').value;
+  const version = document.getElementById('mod-version-filter').value.trim();
+  const destPath = document.getElementById('mod-dest-path').value.trim() || 'mods';
+
+  btn.disabled = true;
+  btn.className = 'mod-install-btn installing';
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+  try {
+    const params = new URLSearchParams({ id, source });
+    if (loader)  params.set('loader', loader);
+    if (version) params.set('version', version);
+    const vRes = await api('GET', `/api/mods/versions?${params}`);
+
+    if (!vRes.ok || !vRes.versions.length) {
+      toast(`No compatible files found for "${name}"`, 'error');
+      btn.disabled = false; btn.className = 'mod-install-btn'; btn.innerHTML = '<i class="fa-solid fa-plus"></i> Install';
+      return;
+    }
+
+    // Pick the first version's primary file
+    const latest = vRes.versions[0];
+    const file = latest.files[0];
+    if (!file || !file.url) {
+      toast(`No downloadable file for "${name}"`, 'error');
+      btn.disabled = false; btn.className = 'mod-install-btn'; btn.innerHTML = '<i class="fa-solid fa-plus"></i> Install';
+      return;
+    }
+
+    const iRes = await fetch(`/api/servers/${fmServerId}/mods/install`, {
+      method: 'POST',
+      headers: { 'x-panel-password': PW, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileUrl: file.url, fileName: file.name, destPath }),
+    });
+    const iData = await iRes.json();
+
+    if (iData.ok) {
+      btn.className = 'mod-install-btn done';
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Installed';
+      toast(`"${name}" installed to /${destPath}`, 'success');
+      // Refresh FM if we're in that folder
+      if (fmServerId) fmLoad(fmPath);
+    } else {
+      toast(iData.error || 'Install failed', 'error');
+      btn.disabled = false; btn.className = 'mod-install-btn'; btn.innerHTML = '<i class="fa-solid fa-plus"></i> Install';
+    }
+  } catch (err) {
+    toast(err.message, 'error');
+    btn.disabled = false; btn.className = 'mod-install-btn'; btn.innerHTML = '<i class="fa-solid fa-plus"></i> Install';
+  }
 }
 
 setInterval(()=>renderServers(),30000);
