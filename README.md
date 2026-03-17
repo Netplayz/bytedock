@@ -147,6 +147,8 @@ Mount host directories using the **Volumes** field when creating a container:
 
 ```
 /opt/myserver:/data
+or
+/home/user/bytedock/data
 ```
 
 The panel never deletes volume data when removing a container — only the container itself is removed.
