@@ -177,7 +177,8 @@ async function ensureImageExists(id, image) {
 }
 
 function buildStartupCmd(cfg) {
-  let cmd = cfg.startup || '';
+  // startupOverride takes precedence over the egg's startup template
+  let cmd = (cfg.startupOverride && cfg.startupOverride.trim()) ? cfg.startupOverride : (cfg.startup || '');
   Object.entries(cfg.env || {}).forEach(([k, v]) => {
     cmd = cmd.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v);
   });
@@ -243,6 +244,8 @@ async function createContainer(id, cfg) {
 
   pushLog(id, `Creating container: ${name}`, 'info');
 
+  if (cfg.gpu) pushLog(id, 'GPU passthrough enabled (NVIDIA runtime required on host)', 'info');
+
   const opts = {
     name,
     Image: cfg.image,
@@ -259,6 +262,14 @@ async function createContainer(id, cfg) {
       Binds: allBinds,
       Memory: cfg.memory ? cfg.memory * 1024 * 1024 : 0,
       RestartPolicy: { Name: 'no' },
+      // GPU passthrough — requires nvidia-container-toolkit on the host
+      ...(cfg.gpu ? {
+        DeviceRequests: [{
+          Driver: 'nvidia',
+          Count: -1,
+          Capabilities: [['gpu']],
+        }],
+      } : {}),
     },
   };
 
@@ -806,6 +817,177 @@ app.post('/api/eggs', auth, (req, res) => {
   if (!fs.existsSync(eggsPath)) fs.mkdirSync(eggsPath, { recursive: true });
   fs.writeFileSync(file, JSON.stringify(egg, null, 2));
   res.json({ ok: true, id });
+});
+
+// ── MOD SEARCH PROXY ──
+// Uses Modrinth (no key needed) and CurseForge (requires config.panel.curseforgeApiKey)
+
+const https = require('https');
+
+function httpsGet(url, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const opts = new URL(url);
+    https.get({ hostname: opts.hostname, path: opts.pathname + opts.search, headers: { 'User-Agent': 'ByteDock/2.2', ...headers } }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+        catch { resolve({ status: res.statusCode, body: data }); }
+      });
+    }).on('error', reject);
+  });
+}
+
+app.get('/api/mods/search', auth, async (req, res) => {
+  const { q = '', source = 'modrinth', loader = '', version = '' } = req.query;
+
+  try {
+    if (source === 'modrinth') {
+      const facets = [['project_type:mod']];
+      if (loader)  facets.push([`categories:${loader}`]);
+      if (version) facets.push([`versions:${version}`]);
+      const url = `https://api.modrinth.com/v2/search?query=${encodeURIComponent(q)}&facets=${encodeURIComponent(JSON.stringify(facets))}&limit=24&index=relevance`;
+      const r = await httpsGet(url);
+      if (r.status !== 200) return res.status(502).json({ ok: false, error: 'Modrinth API error' });
+      const mods = (r.body.hits || []).map(m => ({
+        id: m.project_id,
+        slug: m.slug,
+        name: m.title,
+        description: m.description,
+        icon: m.icon_url || null,
+        author: m.author,
+        downloads: m.downloads,
+        categories: m.categories || [],
+        source: 'modrinth',
+        url: `https://modrinth.com/mod/${m.slug}`,
+      }));
+      return res.json({ ok: true, mods });
+    }
+
+    if (source === 'curseforge') {
+      const apiKey = config.panel.curseforgeApiKey;
+      if (!apiKey) return res.status(400).json({ ok: false, error: 'No CurseForge API key configured. Add curseforgeApiKey to config.json → panel.' });
+      const loaderMap = { fabric: 4, forge: 1, quilt: 5, neoforge: 6 };
+      let url = `https://api.curseforge.com/v1/mods/search?gameId=432&searchFilter=${encodeURIComponent(q)}&pageSize=24&sortField=2&sortOrder=desc`;
+      if (loaderMap[loader]) url += `&modLoaderType=${loaderMap[loader]}`;
+      if (version) url += `&gameVersion=${encodeURIComponent(version)}`;
+      const r = await httpsGet(url, { 'x-api-key': apiKey });
+      if (r.status !== 200) return res.status(502).json({ ok: false, error: 'CurseForge API error' });
+      const mods = (r.body.data || []).map(m => ({
+        id: String(m.id),
+        slug: m.slug,
+        name: m.name,
+        description: m.summary,
+        icon: m.logo?.url || null,
+        author: (m.authors || []).map(a => a.name).join(', '),
+        downloads: m.downloadCount,
+        categories: (m.categories || []).map(c => c.name),
+        source: 'curseforge',
+        url: m.links?.websiteUrl || `https://www.curseforge.com/minecraft/mc-mods/${m.slug}`,
+      }));
+      return res.json({ ok: true, mods });
+    }
+
+    res.status(400).json({ ok: false, error: 'Unknown source' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET latest file URL for a mod version
+app.get('/api/mods/versions', auth, async (req, res) => {
+  const { id, source = 'modrinth', loader = '', version = '' } = req.query;
+  if (!id) return res.status(400).json({ ok: false, error: 'Missing id' });
+
+  try {
+    if (source === 'modrinth') {
+      let url = `https://api.modrinth.com/v2/project/${id}/version?limit=20`;
+      if (loader)  url += `&loaders=${encodeURIComponent(JSON.stringify([loader]))}`;
+      if (version) url += `&game_versions=${encodeURIComponent(JSON.stringify([version]))}`;
+      const r = await httpsGet(url);
+      if (r.status !== 200) return res.status(502).json({ ok: false, error: 'Modrinth API error' });
+      const versions = (r.body || []).map(v => ({
+        id: v.id,
+        name: v.name,
+        version_number: v.version_number,
+        game_versions: v.game_versions,
+        loaders: v.loaders,
+        files: (v.files || []).filter(f => f.primary || f.filename?.endsWith('.jar')).map(f => ({
+          name: f.filename,
+          url: f.url,
+          size: f.size,
+        })),
+      }));
+      return res.json({ ok: true, versions });
+    }
+
+    if (source === 'curseforge') {
+      const apiKey = config.panel.curseforgeApiKey;
+      if (!apiKey) return res.status(400).json({ ok: false, error: 'No CurseForge API key configured.' });
+      let url = `https://api.curseforge.com/v1/mods/${id}/files?pageSize=20`;
+      if (version) url += `&gameVersion=${encodeURIComponent(version)}`;
+      const r = await httpsGet(url, { 'x-api-key': apiKey });
+      if (r.status !== 200) return res.status(502).json({ ok: false, error: 'CurseForge API error' });
+      const versions = (r.body.data || []).map(f => ({
+        id: String(f.id),
+        name: f.displayName,
+        version_number: f.fileName,
+        game_versions: f.gameVersions,
+        loaders: [],
+        files: [{ name: f.fileName, url: f.downloadUrl, size: f.fileLength }],
+      }));
+      return res.json({ ok: true, versions });
+    }
+
+    res.status(400).json({ ok: false, error: 'Unknown source' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Download a mod file and save it to the server's data dir
+app.post('/api/servers/:id/mods/install', auth, async (req, res) => {
+  const { id } = req.params;
+  const { fileUrl, fileName, destPath = 'mods' } = req.body;
+
+  if (!processes[id]) return res.status(404).json({ ok: false, error: 'Server not found' });
+  if (!fileUrl || !fileName) return res.status(400).json({ ok: false, error: 'Missing fileUrl or fileName' });
+
+  try {
+    const { resolved: destDir } = resolveDataPath(id, destPath);
+    fs.mkdirSync(destDir, { recursive: true });
+
+    const filePath = path.join(destDir, fileName);
+    const fileBuffer = await new Promise((resolve, reject) => {
+      const urlObj = new URL(fileUrl);
+      const chunks = [];
+      const options = {
+        hostname: urlObj.hostname,
+        path: urlObj.pathname + urlObj.search,
+        headers: { 'User-Agent': 'ByteDock/2.2' },
+      };
+      https.get(options, (r) => {
+        if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location) {
+          // Follow one redirect
+          https.get(r.headers.location, (r2) => {
+            r2.on('data', c => chunks.push(c));
+            r2.on('end', () => resolve(Buffer.concat(chunks)));
+            r2.on('error', reject);
+          }).on('error', reject);
+          return;
+        }
+        r.on('data', c => chunks.push(c));
+        r.on('end', () => resolve(Buffer.concat(chunks)));
+        r.on('error', reject);
+      }).on('error', reject);
+    });
+
+    fs.writeFileSync(filePath, fileBuffer);
+    pushActivity(`${processes[id].cfg.name}: mod "${fileName}" installed`, 'blue');
+    res.json({ ok: true, path: path.join(destPath, fileName), size: fileBuffer.length });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 app.get('/api/stats',    auth, async (req, res) => {
