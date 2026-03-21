@@ -214,7 +214,7 @@ WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now home-panel
+sudo systemctl enable --now bytedock
 ```
 
 ---
@@ -222,7 +222,7 @@ sudo systemctl enable --now home-panel
 ##  Project Structure
 
 ```
-home-server-management/
+bytedock/
 ├── server.js          # Express + WebSocket backend
 ├── config.json        # Panel config and saved servers
 ├── package.json
