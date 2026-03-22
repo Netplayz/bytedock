@@ -44,7 +44,7 @@ GET /api/servers
     "autoRestart": false,
     "startup": "",
     "env": { "TYPE": "PAPER", "VERSION": "LATEST" },
-    "dataDir": "/home/user/home-server-management/data/my-server-1abc2def",
+    "dataDir": "/home/user/bytedock/data/my-server-1abc2def",
     "containerId": "a3f2b1c4d5e6...",
     "startedAt": 1718000000000,
     "restartCount": 0,
