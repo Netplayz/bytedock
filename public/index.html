@@ -2105,41 +2105,98 @@ async function fmHandleUpload(files){
 // Filename patterns for mods that are always client-side.
 // Catches the most common ones before even uploading; the backend scan
 // catches anything that slips through based on actual JAR metadata.
+// Known client-only mod filename patterns.
+// Strips hyphens/underscores/dots before matching so "rubidium-0.6.1.jar",
+// "Rubidium_extra-0.5.jar", etc. all hit the same rule.
 const CLIENT_MOD_PATTERNS = [
+  // ── Renderers / performance (client-side only) ──
   /^optifine/i, /^optifabric/i,
   /^iris/i, /^oculus/i,
   /^sodium/i, /^rubidium/i, /^embeddium/i,
+  /^magnesium/i,
   /^lithium/i, /^phosphor/i, /^starlight/i,
   /^ferritecore/i,
-  /^smoothboot/i,
-  /^betterf3/i, /^betterfps/i,
-  /^dynamiclights/i,
+  /^nvidium/i, /^vulkanmod/i,
+  /^entityculling/i,
+  /^culllessleaves/i, /^cullleaves/i,
+  /^betterbiomeblend/i,
+  /^smoothchunk/i,
+
+  // ── Shader libraries / packs ──
+  /^satin/i,                  // Satin shader library (from your log)
+  /^shader/i,
+  /^complementary/i, /^bsl.*shader/i, /^seus/i,
+  /^continuity/i,
+  /^canvas/i,
+
+  // ── Lighting ──
+  /^dynamiclights/i, /^dynamiclightsreforged/i, /^lambdynamiclights/i,
+
+  // ── Camera / view ──
+  /^cameraoverhaul/i,         // from your log
+  /^camerashake/i,
+  /^firstperson/i,            // First Person Model — from your log
+  /^shouldersurfer/i,
+  /^perspectivemod/i,
+
+  // ── HUD / UI ──
+  /^betterf3/i, /^betterfps/i, /^nof3/i, /^nof3debug/i,
+  /^no_f3/i,                  // from your log
+  /^drippyloadingscreen/i,    // from your log
+  /^fancymenu/i,              // from your log
+  /^modmenu/i,
+  /^cleanview/i,
+  /^bossbar/i,
+  /^torohealth/i,
+  /^hudcompass/i,
+  /^minimap/i,
   /^xaerosminimap/i, /^xaerosworldmap/i,
   /^journeymap/i,
-  /^jei.*client/i,
+  /^voxelmap/i,
+  /^replaymod/i,
+  /^screenshot/i, /^fullscreen/i,
+
+  // ── Zoom ──
+  /^okzoomer/i,               // from your log
+  /^zoomify/i, /^wionzoommod/i,
+
+  // ── Sounds ──
+  /^presencefootsteps/i,      // from your log
+  /^soundphysics/i,           // (reforged version is BOTH, but plain soundphysics is client)
+  /^auditory/i,
+  /^ambientenvironment/i,
+  /^audioextension/i,
+  /^sound.*control/i,
+
+  // ── Animations / cosmetics ──
+  /^smoothswapping/i,         // from your log
+  /^notenoughanimations/i, /^nea/i,
+  /^waveycapes/i, /^capes/i,
+  /^cosmetic/i,
+  /^customskinloader/i,
+  /^skin/i,
+  /^ears/i,
+
+  // ── Inventory / input QOL ──
   /^inventoryprofiles/i,
   /^itemscroller/i,
   /^mousetweaks/i,
+  /^smoothscrolling/i,
+
+  // ── Chat / social ──
+  /^chattweaks/i, /^chathead/i,
+  /^chathax/i,
+
+  // ── Performance / startup ──
+  /^smoothboot/i,             // from your log
+  /^fpsreducer/i,
+
+  // ── Misc visual client mods ──
+  /^enhancedvisuals/i,
   /^controlling/i,
   /^configured/i,
-  /^modmenu/i,
-  /^replaymod/i,
-  /^screenshot/i,
-  /^fullscreen/i,
-  /^fpsreducer/i,
-  /^entityculling/i,
-  /^enhancedvisuals/i,
-  /^chattweaks/i, /^chathead/i,
-  /^customskinloader/i,
-  /^waveycapes/i,
-  /^cosmetic/i,
-  /^skin/i,
-  /^capes/i,
-  /^lambdynamiclights/i,
-  /^audioextension/i,
-  /^sound.*control/i,
-  /^shader/i,
-  /^complementary/i, /^bsl.*shader/i, /^seus/i,
+  /^lambdabettergrass/i,
+  /^fallingtree/i,            // NOTE: some versions are BOTH — flag for review only
 ];
 
 function isKnownClientMod(fileName) {

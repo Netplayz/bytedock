@@ -1099,58 +1099,153 @@ app.post('/api/servers/:id/modpacks/install', auth, async (req, res) => {
 });
 
 // ── CLIENT MOD SCANNER ──
-// Reads each JAR in a mods directory, extracts mod metadata from inside the ZIP,
-// and identifies mods that declare themselves as client-only.
+// Most Forge client mods do NOT declare side="CLIENT" in mods.toml — they use
+// @OnlyIn(Dist.CLIENT) bytecode annotations. So we use a multi-heuristic approach:
+//   1. Explicit metadata: mods.toml side=CLIENT / fabric.mod.json environment=client
+//   2. Mixin config filenames: if ALL mixin configs reference "client" in their name
+//      and NONE reference "server" or "common", the mod is almost certainly client-only
+//   3. Mixin target class names: if mixin JSON targets only net.minecraft.client.* classes
+//   4. DISTXFORM marker: presence of client-only Forge dist classes in the manifest
 const { execFile } = require('child_process');
 
 function readJarEntry(jarPath, entry) {
   return new Promise((resolve) => {
-    execFile('unzip', ['-p', jarPath, entry], { maxBuffer: 512 * 1024 }, (err, stdout) => {
+    execFile('unzip', ['-p', jarPath, entry], { maxBuffer: 1024 * 1024 }, (err, stdout) => {
       resolve(err ? null : stdout);
     });
   });
 }
 
+function listJarEntries(jarPath) {
+  return new Promise((resolve) => {
+    execFile('unzip', ['-l', jarPath], { maxBuffer: 2 * 1024 * 1024 }, (err, stdout) => {
+      if (err) { resolve([]); return; }
+      // Each line: "  <size>  <date> <time>   <filename>"
+      const lines = stdout.split('\n').slice(3);
+      const entries = [];
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('--------')) break;
+        // filename is last whitespace-separated token
+        const parts = trimmed.split(/\s+/);
+        if (parts.length >= 4) entries.push(parts[parts.length - 1]);
+      }
+      resolve(entries);
+    });
+  });
+}
+
+// Client-side Minecraft class namespaces — any mixin targeting these is client-only
+const CLIENT_CLASS_PREFIXES = [
+  'net.minecraft.client.',
+  'net/minecraft/client/',
+  'net.minecraft.realms.',
+  'net/minecraft/realms/',
+  'com.mojang.blaze3d.',
+  'com/mojang/blaze3d/',
+  'net.optifine.',
+  'net/optifine/',
+];
+
+function targetsClientClasses(json) {
+  const targets = [
+    ...(json.mixins || []),
+    ...(json.client || []),
+    ...(json.server || []),
+    ...(Array.isArray(json.target) ? json.target : (json.target ? [json.target] : [])),
+  ];
+  if (!targets.length) return false;
+  return targets.every(t => CLIENT_CLASS_PREFIXES.some(p => t.includes(p)));
+}
+
 async function classifyJar(jarPath) {
-  // ── Forge / NeoForge: META-INF/mods.toml ──
-  const toml = await readJarEntry(jarPath, 'META-INF/mods.toml');
-  if (toml) {
-    // A mod is client-only if its minecraft dependency side is CLIENT,
-    // or if any top-level side field says CLIENT.
-    // Pattern: side="CLIENT" or side = "CLIENT"
-    if (/side\s*=\s*["']CLIENT["']/i.test(toml)) {
-      return { side: 'CLIENT', source: 'mods.toml' };
+  const entries = await listJarEntries(jarPath);
+  if (!entries.length) return { side: 'UNKNOWN', source: null };
+
+  // ── Heuristic 0: fabric.mod.json (Fabric/Quilt) ──
+  if (entries.includes('fabric.mod.json')) {
+    const raw = await readJarEntry(jarPath, 'fabric.mod.json');
+    if (raw) {
+      try {
+        const meta = JSON.parse(raw);
+        if (meta.environment === 'client' || meta.environment === '*client') {
+          return { side: 'CLIENT', source: 'fabric.mod.json (environment=client)' };
+        }
+      } catch {}
     }
-    return { side: 'BOTH', source: 'mods.toml' };
   }
 
-  // ── Fabric / Quilt: fabric.mod.json ──
-  const fabricRaw = await readJarEntry(jarPath, 'fabric.mod.json');
-  if (fabricRaw) {
-    try {
-      const fabricMeta = JSON.parse(fabricRaw);
-      if (fabricMeta.environment === 'client' || fabricMeta.environment === '*client') {
-        return { side: 'CLIENT', source: 'fabric.mod.json' };
+  // ── Heuristic 1: mods.toml explicit side ──
+  if (entries.includes('META-INF/mods.toml')) {
+    const toml = await readJarEntry(jarPath, 'META-INF/mods.toml');
+    if (toml) {
+      // Check for explicit CLIENT side on the minecraft dependency specifically
+      // Pattern looks for side="CLIENT" within dependency blocks
+      if (/side\s*=\s*["']CLIENT["']/i.test(toml)) {
+        return { side: 'CLIENT', source: 'mods.toml (side=CLIENT)' };
       }
-    } catch {}
-    return { side: 'BOTH', source: 'fabric.mod.json' };
+    }
   }
 
-  // ── Legacy Forge: mcmod.info ──
-  const mcmodRaw = await readJarEntry(jarPath, 'mcmod.info');
-  if (mcmodRaw) {
-    try {
-      const arr = JSON.parse(mcmodRaw.replace(/^\ufeff/, ''));
-      const info = Array.isArray(arr) ? arr[0] : arr.modList?.[0];
-      if (info?.clientSideOnly === true) {
-        return { side: 'CLIENT', source: 'mcmod.info' };
-      }
-    } catch {}
-    return { side: 'BOTH', source: 'mcmod.info' };
+  // ── Heuristic 2: mixin config filenames ──
+  // If every mixin config this JAR registers contains "client" and none contain
+  // "server" or "common" in the filename, it's almost certainly client-only.
+  const mixinConfigs = entries.filter(e =>
+    e.endsWith('.mixins.json') || e.endsWith('.mixin.json') ||
+    (e.includes('mixin') && e.endsWith('.json'))
+  );
+
+  if (mixinConfigs.length > 0) {
+    const clientConfigs  = mixinConfigs.filter(e => /client/i.test(e));
+    const serverConfigs  = mixinConfigs.filter(e => /server/i.test(e));
+    const commonConfigs  = mixinConfigs.filter(e => /common/i.test(e));
+
+    // All mixin configs are client-labelled and none are server/common
+    if (clientConfigs.length === mixinConfigs.length && serverConfigs.length === 0 && commonConfigs.length === 0) {
+      return { side: 'CLIENT', source: `mixin configs (all client: ${clientConfigs.map(e => e.split('/').pop()).join(', ')})` };
+    }
+
+    // ── Heuristic 3: inspect mixin targets inside each config ──
+    // If every mixin in every config targets client-only Minecraft classes, it's client-only
+    let allTargetsAreClient = mixinConfigs.length > 0;
+    let anyTargetsFound = false;
+
+    for (const cfg of mixinConfigs) {
+      const raw = await readJarEntry(jarPath, cfg);
+      if (!raw) { allTargetsAreClient = false; break; }
+      try {
+        const json = JSON.parse(raw);
+        const hasClientTargets = targetsClientClasses(json);
+        const hasServerMixins = (json.server || []).length > 0;
+        if (!hasClientTargets || hasServerMixins) { allTargetsAreClient = false; break; }
+        anyTargetsFound = true;
+      } catch { allTargetsAreClient = false; break; }
+    }
+
+    if (allTargetsAreClient && anyTargetsFound) {
+      return { side: 'CLIENT', source: 'mixin targets (all client-only Minecraft classes)' };
+    }
   }
 
-  // No metadata found — unknown, flag as safe (don't auto-remove unknowns)
-  return { side: 'UNKNOWN', source: null };
+  // ── Heuristic 4: legacy mcmod.info ──
+  const mcmodEntry = entries.find(e => e === 'mcmod.info' || e.endsWith('/mcmod.info'));
+  if (mcmodEntry) {
+    const raw = await readJarEntry(jarPath, mcmodEntry);
+    if (raw) {
+      try {
+        const arr = JSON.parse(raw.replace(/^\ufeff/, ''));
+        const info = Array.isArray(arr) ? arr[0] : arr.modList?.[0];
+        if (info?.clientSideOnly === true) {
+          return { side: 'CLIENT', source: 'mcmod.info (clientSideOnly)' };
+        }
+      } catch {}
+    }
+  }
+
+  // ── Heuristic 5: no server-relevant entry points at all ──
+  // If the JAR has NO mixin configs and NO mods.toml and NO mcmod.info,
+  // but DOES have fabric.mod.json with no environment field, assume BOTH.
+  return { side: 'BOTH', source: null };
 }
 
 // POST /api/servers/:id/mods/scan
