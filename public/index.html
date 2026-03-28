@@ -507,7 +507,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex
             <input type="file" id="fm-folder-input" webkitdirectory multiple style="display:none;" onchange="fmHandleFolderUpload(this.files)"/>
           </label>
           <button class="btn btn-ghost btn-sm" onclick="fmMkdir()"><i class="fa-solid fa-folder-plus"></i> Create Folder</button>
-          <button class="btn btn-ghost btn-sm" id="scan-client-btn" onclick="fmScanClientMods()" style="background:rgba(234,179,8,0.08);color:#fbbf24;border-color:rgba(234,179,8,0.3);" title="Scan current folder for client-only mods that would crash a Forge server"><i class="fa-solid fa-magnifying-glass-minus"></i> Scan Client Mods</button>
         </div>
         <input type="file" id="fm-file-input" multiple style="display:none;" onchange="fmHandleUpload(this.files)"/>
       </div>
@@ -832,21 +831,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex
 
     <div class="modal-footer" style="margin-top:16px;">
       <button class="btn btn-ghost" onclick="closeModModal()">Close</button>
-    </div>
-  </div>
-</div>
-
-<!-- CLIENT MOD WARNING MODAL -->
-<div class="overlay" id="client-mod-modal" onclick="if(event.target===this)closeClientModModal()">
-  <div class="modal" style="max-width:480px;">
-    <div class="modal-title"><i class="fa-solid fa-triangle-exclamation" style="color:#fbbf24;font-size:16px;margin-right:8px;"></i>Client-Only Mods Detected</div>
-    <div class="modal-sub">These mods are marked <strong>client-only</strong> and will crash your Forge server. Remove them before starting.</div>
-    <div id="client-mod-list" style="margin:14px 0;display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;"></div>
-    <div class="modal-footer" style="margin-top:4px;">
-      <button class="btn btn-ghost" onclick="closeClientModModal()">Ignore</button>
-      <button class="btn" id="client-mod-remove-btn" style="background:var(--red);border-color:var(--red);color:#fff;" onclick="removeClientMods()">
-        <i class="fa-solid fa-trash"></i> Remove All Client Mods
-      </button>
     </div>
   </div>
 </div>
@@ -2102,101 +2086,50 @@ async function fmHandleUpload(files){
 }
 
 // ── CLIENT-ONLY MOD FILTER ──
-// Filename patterns for mods that are always client-side.
-// Catches the most common ones before even uploading; the backend scan
-// catches anything that slips through based on actual JAR metadata.
-// Known client-only mod filename patterns.
-// Strips hyphens/underscores/dots before matching so "rubidium-0.6.1.jar",
-// "Rubidium_extra-0.5.jar", etc. all hit the same rule.
+// Files matching these patterns are silently skipped during folder upload.
 const CLIENT_MOD_PATTERNS = [
-  // ── Renderers / performance (client-side only) ──
+  // Renderers / performance
   /^optifine/i, /^optifabric/i,
   /^iris/i, /^oculus/i,
-  /^sodium/i, /^rubidium/i, /^embeddium/i,
-  /^magnesium/i,
+  /^sodium/i, /^rubidium/i, /^embeddium/i, /^magnesium/i,
   /^lithium/i, /^phosphor/i, /^starlight/i,
-  /^ferritecore/i,
-  /^nvidium/i, /^vulkanmod/i,
-  /^entityculling/i,
-  /^culllessleaves/i, /^cullleaves/i,
-  /^betterbiomeblend/i,
-  /^smoothchunk/i,
-
-  // ── Shader libraries / packs ──
-  /^satin/i,                  // Satin shader library (from your log)
-  /^shader/i,
-  /^complementary/i, /^bsl.*shader/i, /^seus/i,
-  /^continuity/i,
-  /^canvas/i,
-
-  // ── Lighting ──
+  /^ferritecore/i, /^nvidium/i, /^vulkanmod/i,
+  /^entityculling/i, /^culllessleaves/i, /^cullleaves/i,
+  /^betterbiomeblend/i, /^smoothchunk/i,
+  // Shader libraries / packs
+  /^satin/i, /^shader/i,
+  /^complementary/i, /^bslshader/i, /^seus/i,
+  /^continuity/i, /^canvas/i,
+  // Lighting
   /^dynamiclights/i, /^dynamiclightsreforged/i, /^lambdynamiclights/i,
-
-  // ── Camera / view ──
-  /^cameraoverhaul/i,         // from your log
-  /^camerashake/i,
-  /^firstperson/i,            // First Person Model — from your log
-  /^shouldersurfer/i,
-  /^perspectivemod/i,
-
-  // ── HUD / UI ──
-  /^betterf3/i, /^betterfps/i, /^nof3/i, /^nof3debug/i,
-  /^no_f3/i,                  // from your log
-  /^drippyloadingscreen/i,    // from your log
-  /^fancymenu/i,              // from your log
-  /^modmenu/i,
-  /^cleanview/i,
-  /^bossbar/i,
-  /^torohealth/i,
-  /^hudcompass/i,
-  /^minimap/i,
-  /^xaerosminimap/i, /^xaerosworldmap/i,
-  /^journeymap/i,
-  /^voxelmap/i,
-  /^replaymod/i,
+  // Camera / view
+  /^cameraoverhaul/i, /^camerashake/i,
+  /^firstperson/i, /^shouldersurfer/i, /^perspectivemod/i,
+  // HUD / UI
+  /^betterf3/i, /^betterfps/i, /^nof3/i, /^nof3debug/i, /^no_f3/i,
+  /^drippyloadingscreen/i, /^fancymenu/i, /^modmenu/i,
+  /^cleanview/i, /^bossbar/i, /^torohealth/i, /^hudcompass/i,
+  /^minimap/i, /^xaerosminimap/i, /^xaerosworldmap/i,
+  /^journeymap/i, /^voxelmap/i, /^replaymod/i,
   /^screenshot/i, /^fullscreen/i,
-
-  // ── Zoom ──
-  /^okzoomer/i,               // from your log
-  /^zoomify/i, /^wionzoommod/i,
-
-  // ── Sounds ──
-  /^presencefootsteps/i,      // from your log
-  /^soundphysics/i,           // (reforged version is BOTH, but plain soundphysics is client)
-  /^auditory/i,
-  /^ambientenvironment/i,
-  /^audioextension/i,
-  /^sound.*control/i,
-
-  // ── Animations / cosmetics ──
-  /^smoothswapping/i,         // from your log
-  /^notenoughanimations/i, /^nea/i,
-  /^waveycapes/i, /^capes/i,
-  /^cosmetic/i,
-  /^customskinloader/i,
-  /^skin/i,
-  /^ears/i,
-
-  // ── Inventory / input QOL ──
-  /^inventoryprofiles/i,
-  /^itemscroller/i,
-  /^mousetweaks/i,
-  /^smoothscrolling/i,
-
-  // ── Chat / social ──
-  /^chattweaks/i, /^chathead/i,
-  /^chathax/i,
-
-  // ── Performance / startup ──
-  /^smoothboot/i,             // from your log
-  /^fpsreducer/i,
-
-  // ── Misc visual client mods ──
-  /^enhancedvisuals/i,
-  /^controlling/i,
-  /^configured/i,
-  /^lambdabettergrass/i,
-  /^fallingtree/i,            // NOTE: some versions are BOTH — flag for review only
+  // Zoom
+  /^okzoomer/i, /^zoomify/i,
+  // Sounds
+  /^presencefootsteps/i, /^auditory/i,
+  /^ambientenvironment/i, /^audioextension/i, /^soundcontrol/i,
+  // Animations / cosmetics
+  /^smoothswapping/i, /^notenoughanimations/i,
+  /^waveycapes/i, /^capes/i, /^cosmetic/i,
+  /^customskinloader/i, /^ears/i,
+  // Inventory / input
+  /^inventoryprofiles/i, /^itemscroller/i,
+  /^mousetweaks/i, /^smoothscrolling/i,
+  // Chat
+  /^chattweaks/i, /^chathead/i, /^chathax/i,
+  // Startup / perf
+  /^smoothboot/i, /^fpsreducer/i,
+  // Misc visual
+  /^enhancedvisuals/i, /^lambdabettergrass/i,
 ];
 
 function isKnownClientMod(fileName) {
@@ -2204,110 +2137,13 @@ function isKnownClientMod(fileName) {
   return CLIENT_MOD_PATTERNS.some(p => p.test(base));
 }
 
-// State for the client-mod modal
-let _clientModScanPath = 'mods';
-let _clientModList = [];
-
-function closeClientModModal() {
-  document.getElementById('client-mod-modal').classList.remove('open');
-  _clientModList = [];
-}
-
-async function runClientModScan(modsRelPath) {
-  if (!fmServerId) return;
-  try {
-    const res = await fetch(`/api/servers/${fmServerId}/mods/scan`, {
-      method: 'POST',
-      headers: { 'x-panel-password': PW, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: modsRelPath }),
-    });
-    const data = await res.json();
-    if (!data.ok || !data.clientMods.length) return;
-
-    _clientModScanPath = modsRelPath;
-    _clientModList = data.clientMods;
-
-    const list = document.getElementById('client-mod-list');
-    list.innerHTML = data.clientMods.map(m => `
-      <div style="display:flex;align-items:center;gap:10px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:7px;padding:8px 12px;">
-        <i class="fa-solid fa-jar" style="color:var(--red);opacity:0.7;flex-shrink:0;"></i>
-        <div style="min-width:0;">
-          <div style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.fileName)}</div>
-          <div style="font-size:10.5px;color:var(--dim);">detected via ${esc(m.source || 'filename')}</div>
-        </div>
-      </div>`).join('');
-
-    document.getElementById('client-mod-modal').classList.add('open');
-  } catch (err) {
-    console.warn('Client mod scan failed:', err.message);
-  }
-}
-
-async function removeClientMods() {
-  if (!fmServerId || !_clientModList.length) return;
-  const btn = document.getElementById('client-mod-remove-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Removing…';
-  try {
-    const res = await fetch(`/api/servers/${fmServerId}/mods/remove-client`, {
-      method: 'POST',
-      headers: { 'x-panel-password': PW, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: _clientModScanPath, fileNames: _clientModList.map(m => m.fileName) }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      toast(`Removed ${data.removed} client-only mod${data.removed === 1 ? '' : 's'}`, 'success');
-      closeClientModModal();
-      await fmLoad(fmPath);
-    } else {
-      toast(data.error || 'Remove failed', 'error');
-    }
-  } catch (err) {
-    toast(err.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-trash"></i> Remove All Client Mods';
-  }
-}
-
-async function fmScanClientMods() {
-  if (!fmServerId) { toast('Select a container first', 'error'); return; }
-  const btn = document.getElementById('scan-client-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Scanning…';
-  const relPath = fmPath || 'mods';
-  await runClientModScan(relPath);
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fa-solid fa-magnifying-glass-minus"></i> Scan Client Mods';
-  if (!_clientModList.length) toast('No client-only mods detected in this folder', 'success');
-}
-
 async function fmHandleFolderUpload(files) {
   if (!files || !files.length || !fmServerId) return;
 
-  // ── Pre-upload filter ──
-  // Split files into safe (upload) and suspected client-only (warn + skip).
+  // Silently skip any JAR that matches the client-mod blocklist
   const allFiles = Array.from(files);
-  const skipped = [];
-  const toUpload = [];
-
-  for (const f of allFiles) {
-    if (f.name.toLowerCase().endsWith('.jar') && isKnownClientMod(f.name)) {
-      skipped.push(f.name);
-    } else {
-      toUpload.push(f);
-    }
-  }
-
-  if (skipped.length) {
-    const skip = confirm(
-      `${skipped.length} known client-only mod${skipped.length === 1 ? '' : 's'} detected:\n\n` +
-      skipped.slice(0, 10).join('\n') +
-      (skipped.length > 10 ? `\n…and ${skipped.length - 10} more` : '') +
-      `\n\nSkip these and upload the rest?`
-    );
-    if (!skip) return; // user cancelled entirely
-  }
+  const toUpload = allFiles.filter(f => !(f.name.toLowerCase().endsWith('.jar') && isKnownClientMod(f.name)));
+  const skipped  = allFiles.length - toUpload.length;
 
   if (!toUpload.length) {
     toast('All files were client-only mods — nothing uploaded', 'warn');
@@ -2315,40 +2151,31 @@ async function fmHandleFolderUpload(files) {
     return;
   }
 
-  // ── Group remaining files by subdirectory and upload ──
+  // Group by subdirectory and upload
   const byDir = {};
   toUpload.forEach(f => {
-    const rel = f.webkitRelativePath || f.name;
+    const rel   = f.webkitRelativePath || f.name;
     const parts = rel.split('/'); parts.pop();
-    const dir = parts.join('/');
+    const dir   = parts.join('/');
     if (!byDir[dir]) byDir[dir] = [];
     byDir[dir].push(f);
   });
 
   let total = 0;
-  let modsRelPath = null;
-
   for (const [subDir, batch] of Object.entries(byDir)) {
     const destRel = fmPath ? (subDir ? `${fmPath}/${subDir}` : fmPath) : (subDir || '');
-    // Track the mods directory for post-upload scan
-    if (destRel.split('/').pop() === 'mods' || destRel === 'mods') modsRelPath = destRel;
     const fd = new FormData();
     fd.append('path', destRel);
     batch.forEach(f => fd.append('files', f, f.name));
-    const res = await fetch(`/api/servers/${fmServerId}/files/upload`, { method: 'POST', headers: { 'x-panel-password': PW }, body: fd });
+    const res  = await fetch(`/api/servers/${fmServerId}/files/upload`, { method: 'POST', headers: { 'x-panel-password': PW }, body: fd });
     const data = await res.json();
     if (data.ok) total += data.count;
   }
 
-  const skippedNote = skipped.length ? ` (${skipped.length} client mod${skipped.length === 1 ? '' : 's'} skipped)` : '';
-  toast(`${total} file${total === 1 ? '' : 's'} uploaded${skippedNote}`, 'success');
+  const note = skipped > 0 ? ` (${skipped} client-only mod${skipped === 1 ? '' : 's'} skipped)` : '';
+  toast(`${total} file${total === 1 ? '' : 's'} uploaded${note}`, 'success');
   await fmLoad(fmPath);
   document.getElementById('fm-folder-input').value = '';
-
-  // ── Post-upload deep scan ──
-  // Run backend JAR metadata scan on the mods folder to catch any
-  // client-only mods that weren't in the filename blocklist.
-  if (modsRelPath) await runClientModScan(modsRelPath);
 }
 
 // helper: api() but returns json (no Content-Type for DELETE with body)
