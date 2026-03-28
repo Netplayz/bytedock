@@ -1098,6 +1098,114 @@ app.post('/api/servers/:id/modpacks/install', auth, async (req, res) => {
   }
 });
 
+// ── CLIENT MOD SCANNER ──
+// Reads each JAR in a mods directory, extracts mod metadata from inside the ZIP,
+// and identifies mods that declare themselves as client-only.
+const { execFile } = require('child_process');
+
+function readJarEntry(jarPath, entry) {
+  return new Promise((resolve) => {
+    execFile('unzip', ['-p', jarPath, entry], { maxBuffer: 512 * 1024 }, (err, stdout) => {
+      resolve(err ? null : stdout);
+    });
+  });
+}
+
+async function classifyJar(jarPath) {
+  // ── Forge / NeoForge: META-INF/mods.toml ──
+  const toml = await readJarEntry(jarPath, 'META-INF/mods.toml');
+  if (toml) {
+    // A mod is client-only if its minecraft dependency side is CLIENT,
+    // or if any top-level side field says CLIENT.
+    // Pattern: side="CLIENT" or side = "CLIENT"
+    if (/side\s*=\s*["']CLIENT["']/i.test(toml)) {
+      return { side: 'CLIENT', source: 'mods.toml' };
+    }
+    return { side: 'BOTH', source: 'mods.toml' };
+  }
+
+  // ── Fabric / Quilt: fabric.mod.json ──
+  const fabricRaw = await readJarEntry(jarPath, 'fabric.mod.json');
+  if (fabricRaw) {
+    try {
+      const fabricMeta = JSON.parse(fabricRaw);
+      if (fabricMeta.environment === 'client' || fabricMeta.environment === '*client') {
+        return { side: 'CLIENT', source: 'fabric.mod.json' };
+      }
+    } catch {}
+    return { side: 'BOTH', source: 'fabric.mod.json' };
+  }
+
+  // ── Legacy Forge: mcmod.info ──
+  const mcmodRaw = await readJarEntry(jarPath, 'mcmod.info');
+  if (mcmodRaw) {
+    try {
+      const arr = JSON.parse(mcmodRaw.replace(/^\ufeff/, ''));
+      const info = Array.isArray(arr) ? arr[0] : arr.modList?.[0];
+      if (info?.clientSideOnly === true) {
+        return { side: 'CLIENT', source: 'mcmod.info' };
+      }
+    } catch {}
+    return { side: 'BOTH', source: 'mcmod.info' };
+  }
+
+  // No metadata found — unknown, flag as safe (don't auto-remove unknowns)
+  return { side: 'UNKNOWN', source: null };
+}
+
+// POST /api/servers/:id/mods/scan
+// Scans all JARs in the given path and returns a list of client-only ones.
+app.post('/api/servers/:id/mods/scan', auth, async (req, res) => {
+  const { id } = req.params;
+  const { path: relPath = 'mods' } = req.body;
+  if (!processes[id]) return res.status(404).json({ ok: false, error: 'Server not found' });
+
+  try {
+    const { resolved: modsDir } = resolveDataPath(id, relPath);
+    if (!fs.existsSync(modsDir)) return res.json({ ok: true, clientMods: [] });
+
+    const jars = fs.readdirSync(modsDir).filter(f => f.toLowerCase().endsWith('.jar'));
+    const results = [];
+
+    for (const jar of jars) {
+      const fullPath = path.join(modsDir, jar);
+      const info = await classifyJar(fullPath);
+      if (info.side === 'CLIENT') {
+        results.push({ fileName: jar, source: info.source });
+      }
+    }
+
+    res.json({ ok: true, clientMods: results });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/servers/:id/mods/remove-client
+// Deletes the listed JAR files from the mods directory.
+app.post('/api/servers/:id/mods/remove-client', auth, async (req, res) => {
+  const { id } = req.params;
+  const { path: relPath = 'mods', fileNames = [] } = req.body;
+  if (!processes[id]) return res.status(404).json({ ok: false, error: 'Server not found' });
+  if (!fileNames.length) return res.json({ ok: true, removed: 0 });
+
+  try {
+    const { resolved: modsDir } = resolveDataPath(id, relPath);
+    let removed = 0;
+    for (const name of fileNames) {
+      // Safety: strip any path separators so callers can't escape the mods dir
+      const safe = path.basename(name);
+      if (!safe.toLowerCase().endsWith('.jar')) continue;
+      const target = path.join(modsDir, safe);
+      if (fs.existsSync(target)) { fs.unlinkSync(target); removed++; }
+    }
+    pushActivity(`${processes[id].cfg.name}: removed ${removed} client-only mod${removed === 1 ? '' : 's'}`, 'yellow');
+    res.json({ ok: true, removed });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/api/stats',    auth, async (req, res) => {
   try { res.json(await getSystemStats()); }
   catch (e) { res.status(500).json({ error: e.message }); }
