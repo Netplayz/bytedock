@@ -888,6 +888,56 @@ app.get('/api/mods/search', auth, async (req, res) => {
       return res.json({ ok: true, mods });
     }
 
+    // ── Modrinth modpack search ──
+    if (source === 'modpack-modrinth') {
+      const facets = [['project_type:modpack']];
+      if (loader)  facets.push([`categories:${loader}`]);
+      if (version) facets.push([`versions:${version}`]);
+      const url = `https://api.modrinth.com/v2/search?query=${encodeURIComponent(q)}&facets=${encodeURIComponent(JSON.stringify(facets))}&limit=24&index=relevance`;
+      const r = await httpsGet(url);
+      if (r.status !== 200) return res.status(502).json({ ok: false, error: 'Modrinth API error' });
+      const mods = (r.body.hits || []).map(m => ({
+        id: m.project_id,
+        slug: m.slug,
+        name: m.title,
+        description: m.description,
+        icon: m.icon_url || null,
+        author: m.author,
+        downloads: m.downloads,
+        categories: m.categories || [],
+        game_versions: m.game_versions || [],
+        source: 'modpack-modrinth',
+        url: `https://modrinth.com/modpack/${m.slug}`,
+      }));
+      return res.json({ ok: true, mods });
+    }
+
+    // ── CurseForge modpack search (classId 4471 = Modpacks) ──
+    if (source === 'modpack-curseforge') {
+      const apiKey = config.panel.curseforgeApiKey;
+      if (!apiKey) return res.status(400).json({ ok: false, error: 'No CurseForge API key configured. Add curseforgeApiKey to config.json → panel.' });
+      const loaderMap = { fabric: 4, forge: 1, quilt: 5, neoforge: 6 };
+      let url = `https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&searchFilter=${encodeURIComponent(q)}&pageSize=24&sortField=2&sortOrder=desc`;
+      if (loaderMap[loader]) url += `&modLoaderType=${loaderMap[loader]}`;
+      if (version) url += `&gameVersion=${encodeURIComponent(version)}`;
+      const r = await httpsGet(url, { 'x-api-key': apiKey });
+      if (r.status !== 200) return res.status(502).json({ ok: false, error: 'CurseForge API error' });
+      const mods = (r.body.data || []).map(m => ({
+        id: String(m.id),
+        slug: m.slug,
+        name: m.name,
+        description: m.summary,
+        icon: m.logo?.url || null,
+        author: (m.authors || []).map(a => a.name).join(', '),
+        downloads: m.downloadCount,
+        categories: (m.categories || []).map(c => c.name),
+        game_versions: (m.latestFilesIndexes || []).map(f => f.gameVersion).filter(Boolean),
+        source: 'modpack-curseforge',
+        url: m.links?.websiteUrl || `https://www.curseforge.com/minecraft/modpacks/${m.slug}`,
+      }));
+      return res.json({ ok: true, mods });
+    }
+
     res.status(400).json({ ok: false, error: 'Unknown source' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -985,6 +1035,64 @@ app.post('/api/servers/:id/mods/install', auth, async (req, res) => {
     fs.writeFileSync(filePath, fileBuffer);
     pushActivity(`${processes[id].cfg.name}: mod "${fileName}" installed`, 'blue');
     res.json({ ok: true, path: path.join(destPath, fileName), size: fileBuffer.length });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── MODPACK INSTALL ──
+// Configures the itzg/minecraft-server container to use a modpack via env vars,
+// then restarts the container so the image bootstraps the pack on next startup.
+app.post('/api/servers/:id/modpacks/install', auth, async (req, res) => {
+  const { id } = req.params;
+  const { source, modpackSlug, modpackName, version } = req.body;
+
+  const state = processes[id];
+  if (!state) return res.status(404).json({ ok: false, error: 'Server not found' });
+
+  const cfg = state.cfg;
+  const newEnv = { ...(cfg.env || {}) };
+
+  try {
+    if (source === 'modpack-modrinth') {
+      // itzg/minecraft-server: TYPE=MODRINTH + MODRINTH_MODPACK=<slug> or <slug:version>
+      newEnv.TYPE = 'MODRINTH';
+      newEnv.MODRINTH_MODPACK = version ? `${modpackSlug}:${version}` : modpackSlug;
+      // Remove conflicting CurseForge modpack vars
+      delete newEnv.CF_SLUG;
+      delete newEnv.CF_PAGE_URL;
+      delete newEnv.CF_FILENAME_MATCHER;
+      delete newEnv.CF_API_KEY;
+    } else if (source === 'modpack-curseforge') {
+      const apiKey = config.panel.curseforgeApiKey;
+      if (!apiKey) return res.status(400).json({ ok: false, error: 'No CurseForge API key configured. Add curseforgeApiKey to config.json → panel.' });
+      // itzg/minecraft-server: TYPE=AUTO_CURSEFORGE + CF_SLUG + optional CF_FILENAME_MATCHER
+      newEnv.TYPE = 'AUTO_CURSEFORGE';
+      newEnv.CF_SLUG = modpackSlug;
+      newEnv.CF_API_KEY = apiKey;
+      if (version) newEnv.CF_FILENAME_MATCHER = version;
+      else delete newEnv.CF_FILENAME_MATCHER;
+      // Remove conflicting Modrinth modpack vars
+      delete newEnv.MODRINTH_MODPACK;
+    } else {
+      return res.status(400).json({ ok: false, error: 'Unknown modpack source' });
+    }
+
+    // Persist updated env to config so it survives ByteDock restarts
+    cfg.env = newEnv;
+    const idx = config.servers.findIndex(s => s.id === id);
+    if (idx !== -1) {
+      config.servers[idx].env = newEnv;
+      saveConfig(config);
+    }
+
+    pushActivity(`${cfg.name}: modpack "${modpackName}" configured — restarting`, 'violet');
+
+    // Stop then start so the container is re-created with the new env
+    await stopServer(id);
+    await startServer(id);
+
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
