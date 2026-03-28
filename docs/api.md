@@ -584,3 +584,116 @@ All endpoints return a consistent error shape:
 | `401` | Missing or wrong password |
 | `404` | Server ID not found |
 | `500` | Unexpected server error |
+
+---
+
+## Mod APIs
+
+All mod endpoints require the `X-Panel-Password` header (if a password is configured).
+
+### Search mods
+
+```
+GET /api/mods/search?q=<query>&source=<source>&loader=<loader>&version=<version>
+```
+
+| Param | Values | Notes |
+|---|---|---|
+| `source` | `modrinth` *(default)*, `curseforge`, `modpack-modrinth`, `modpack-curseforge` | |
+| `loader` | `fabric`, `forge`, `quilt`, `neoforge` | Optional |
+| `version` | e.g. `1.21` | Optional |
+
+### Get mod versions
+
+```
+GET /api/mods/versions?id=<modId>&source=<source>&loader=<loader>&version=<version>
+```
+
+Returns a list of available versions with direct download URLs.
+
+### Install a mod
+
+```
+POST /api/servers/:id/mods/install
+Content-Type: application/json
+
+{
+  "fileUrl": "https://...",
+  "fileName": "mod-1.0.jar",
+  "destPath": "mods",
+  "source": "modrinth"
+}
+```
+
+- Set `"source": "curseforge"` to use a spoofed Windows Chrome/Firefox User-Agent, which is required for CurseForge CDN downloads.
+- Follows up to 5 redirects automatically.
+
+**Response:**
+```json
+{ "ok": true, "path": "mods/mod-1.0.jar", "size": 1234567, "source": "curseforge" }
+```
+
+---
+
+### Check mod side (client / server)
+
+```
+GET /api/mods/side?id=<modId>&source=modrinth|curseforge
+```
+
+Returns whether the mod is intended for the client, server, or both.
+
+**Response:**
+```json
+{
+  "ok": true,
+  "id": "AANobbMI",
+  "name": "Sodium",
+  "clientSide": "required",
+  "serverSide": "unsupported",
+  "side": "client",
+  "source": "modrinth"
+}
+```
+
+`side` values: `"client"` | `"server"` | `"both"` | `"unknown"`
+
+---
+
+### Scan mods folder and delete client-only mods
+
+```
+POST /api/servers/:id/mods/scan-and-clean
+Content-Type: application/json
+
+{ "modsPath": "mods" }
+```
+
+Scans every `.jar` file in the server's mods folder. For each mod it can identify on Modrinth, it checks the `client_side` / `server_side` fields. Any mod marked as **client-only** (`server_side: unsupported`) is **automatically deleted** from the folder.
+
+Mods that cannot be identified are left untouched.
+
+**Response:**
+```json
+{
+  "ok": true,
+  "scanned": 12,
+  "deleted": 3,
+  "results": [
+    {
+      "file": "sodium-0.5.8.jar",
+      "modName": "Sodium",
+      "side": "client",
+      "action": "deleted",
+      "reason": "Client-only mod (server_side=unsupported)"
+    },
+    {
+      "file": "lithium-0.12.jar",
+      "modName": "Lithium",
+      "side": "both",
+      "action": "kept",
+      "reason": "Side: both (client_side=optional, server_side=required)"
+    }
+  ]
+}
+```
