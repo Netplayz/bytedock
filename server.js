@@ -824,6 +824,13 @@ app.post('/api/eggs', auth, (req, res) => {
 
 const https = require('https');
 
+// Fake browser User-Agent used for CurseForge file downloads
+// (CurseForge CDN blocks non-browser UAs on direct download URLs)
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Firefox/125.0';
+
+// httpsGet — JSON API helper (keeps ByteDock UA by default)
 function httpsGet(url, headers = {}) {
   return new Promise((resolve, reject) => {
     const opts = new URL(url);
@@ -838,7 +845,39 @@ function httpsGet(url, headers = {}) {
   });
 }
 
-app.get('/api/mods/search', auth, async (req, res) => {
+// httpsDownload — binary download helper that follows redirects and accepts a custom UA
+function httpsDownload(url, ua = 'ByteDock/2.2', maxRedirects = 5) {
+  return new Promise((resolve, reject) => {
+    function follow(currentUrl, remaining) {
+      if (remaining <= 0) return reject(new Error('Too many redirects'));
+      const urlObj = new URL(currentUrl);
+      const options = {
+        hostname: urlObj.hostname,
+        path: urlObj.pathname + urlObj.search,
+        headers: {
+          'User-Agent': ua,
+          'Accept': '*/*',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      };
+      https.get(options, (r) => {
+        if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location) {
+          const next = r.headers.location.startsWith('http')
+            ? r.headers.location
+            : `https://${urlObj.hostname}${r.headers.location}`;
+          return follow(next, remaining - 1);
+        }
+        const chunks = [];
+        r.on('data', c => chunks.push(c));
+        r.on('end', () => resolve(Buffer.concat(chunks)));
+        r.on('error', reject);
+      }).on('error', reject);
+    }
+    follow(url, maxRedirects);
+  });
+}
+
+
   const { q = '', source = 'modrinth', loader = '', version = '' } = req.query;
 
   try {
@@ -995,10 +1034,12 @@ app.get('/api/mods/versions', auth, async (req, res) => {
   }
 });
 
-// Download a mod file and save it to the server's data dir
+// ── MOD INSTALL ──
+// Downloads a mod file into the server's mods folder.
+// CurseForge CDN requires a real browser User-Agent — we spoof Windows Chrome/Firefox.
 app.post('/api/servers/:id/mods/install', auth, async (req, res) => {
   const { id } = req.params;
-  const { fileUrl, fileName, destPath = 'mods' } = req.body;
+  const { fileUrl, fileName, destPath = 'mods', source = 'modrinth' } = req.body;
 
   if (!processes[id]) return res.status(404).json({ ok: false, error: 'Server not found' });
   if (!fileUrl || !fileName) return res.status(400).json({ ok: false, error: 'Missing fileUrl or fileName' });
@@ -1008,33 +1049,154 @@ app.post('/api/servers/:id/mods/install', auth, async (req, res) => {
     fs.mkdirSync(destDir, { recursive: true });
 
     const filePath = path.join(destDir, fileName);
-    const fileBuffer = await new Promise((resolve, reject) => {
-      const urlObj = new URL(fileUrl);
-      const chunks = [];
-      const options = {
-        hostname: urlObj.hostname,
-        path: urlObj.pathname + urlObj.search,
-        headers: { 'User-Agent': 'ByteDock/2.2' },
-      };
-      https.get(options, (r) => {
-        if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location) {
-          // Follow one redirect
-          https.get(r.headers.location, (r2) => {
-            r2.on('data', c => chunks.push(c));
-            r2.on('end', () => resolve(Buffer.concat(chunks)));
-            r2.on('error', reject);
-          }).on('error', reject);
-          return;
-        }
-        r.on('data', c => chunks.push(c));
-        r.on('end', () => resolve(Buffer.concat(chunks)));
-        r.on('error', reject);
-      }).on('error', reject);
-    });
+
+    // CurseForge CDN blocks non-browser UAs; use a fake Windows Chrome UA for those downloads.
+    const ua = source === 'curseforge' ? BROWSER_UA : 'ByteDock/2.2';
+    const fileBuffer = await httpsDownload(fileUrl, ua);
 
     fs.writeFileSync(filePath, fileBuffer);
-    pushActivity(`${processes[id].cfg.name}: mod "${fileName}" installed`, 'blue');
-    res.json({ ok: true, path: path.join(destPath, fileName), size: fileBuffer.length });
+    pushActivity(`${processes[id].cfg.name}: mod "${fileName}" installed from ${source}`, 'blue');
+    res.json({ ok: true, path: path.join(destPath, fileName), size: fileBuffer.length, source });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── MOD SIDE CHECK ──
+// Returns whether a mod is client-side, server-side, or both.
+// Uses Modrinth project API or CurseForge mod API depending on source.
+//
+// GET /api/mods/side?id=<modId>&source=modrinth|curseforge
+//
+// Response:
+//   { ok, id, name, clientSide, serverSide, side }
+//   side: "client" | "server" | "both" | "unknown"
+
+app.get('/api/mods/side', auth, async (req, res) => {
+  const { id, source = 'modrinth' } = req.query;
+  if (!id) return res.status(400).json({ ok: false, error: 'Missing id' });
+
+  try {
+    if (source === 'modrinth') {
+      const r = await httpsGet(`https://api.modrinth.com/v2/project/${id}`);
+      if (r.status !== 200) return res.status(502).json({ ok: false, error: 'Modrinth API error' });
+      const p = r.body;
+      // Modrinth side values: "required" | "optional" | "unsupported"
+      const clientRequired = p.client_side === 'required' || p.client_side === 'optional';
+      const serverRequired = p.server_side === 'required' || p.server_side === 'optional';
+      const clientOnly = clientRequired && (p.server_side === 'unsupported');
+      const serverOnly = serverRequired && (p.client_side === 'unsupported');
+      const side = clientOnly ? 'client' : serverOnly ? 'server' : (clientRequired || serverRequired) ? 'both' : 'unknown';
+      return res.json({
+        ok: true,
+        id,
+        name: p.title,
+        clientSide: p.client_side,
+        serverSide: p.server_side,
+        side,
+        source: 'modrinth',
+      });
+    }
+
+    if (source === 'curseforge') {
+      const apiKey = config.panel.curseforgeApiKey;
+      if (!apiKey) return res.status(400).json({ ok: false, error: 'No CurseForge API key configured.' });
+      const r = await httpsGet(`https://api.curseforge.com/v1/mods/${id}`, { 'x-api-key': apiKey });
+      if (r.status !== 200) return res.status(502).json({ ok: false, error: 'CurseForge API error' });
+      const m = r.body.data;
+      // CurseForge does not expose a structured client/server side field — we infer from categories.
+      const cats = (m.categories || []).map(c => c.name.toLowerCase());
+      const isClientSide = cats.some(c => c.includes('client'));
+      const isServerSide = cats.some(c => c.includes('server'));
+      const side = (isClientSide && !isServerSide) ? 'client'
+                 : (!isClientSide && isServerSide) ? 'server'
+                 : (isClientSide && isServerSide)  ? 'both'
+                 : 'unknown';
+      return res.json({
+        ok: true,
+        id,
+        name: m.name,
+        clientSide: isClientSide ? 'required' : 'unknown',
+        serverSide: isServerSide ? 'required' : 'unknown',
+        side,
+        source: 'curseforge',
+      });
+    }
+
+    res.status(400).json({ ok: false, error: 'Unknown source. Use modrinth or curseforge.' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── MOD SIDE SCAN + AUTO-DELETE ──
+// Scans all .jar files in a server's mods folder, checks each one's side via
+// Modrinth (by filename slug lookup), and deletes any that are client-only.
+//
+// POST /api/servers/:id/mods/scan-and-clean
+// Body: { modsPath: "mods" }   (optional, defaults to "mods")
+//
+// This only works for mods that exist on Modrinth and whose filename can be
+// matched to a version. Mods it cannot identify are left untouched (safe=true).
+
+app.post('/api/servers/:id/mods/scan-and-clean', auth, async (req, res) => {
+  const { id } = req.params;
+  const { modsPath = 'mods' } = req.body;
+
+  if (!processes[id]) return res.status(404).json({ ok: false, error: 'Server not found' });
+
+  try {
+    const { resolved: modsDir } = resolveDataPath(id, modsPath);
+    if (!fs.existsSync(modsDir)) return res.status(404).json({ ok: false, error: 'Mods directory not found' });
+
+    const files = fs.readdirSync(modsDir).filter(f => f.endsWith('.jar'));
+    const results = [];
+
+    for (const file of files) {
+      let action = 'kept';
+      let side = 'unknown';
+      let modName = file;
+      let reason = 'Could not identify mod';
+
+      try {
+        // Search Modrinth by filename (strip version info for a cleaner query)
+        const query = file.replace(/[-_][0-9].*$/, '').replace(/-/g, ' ');
+        const searchR = await httpsGet(
+          `https://api.modrinth.com/v2/search?query=${encodeURIComponent(query)}&facets=${encodeURIComponent(JSON.stringify([['project_type:mod']]))}&limit=5`
+        );
+
+        if (searchR.status === 200 && searchR.body.hits?.length > 0) {
+          const hit = searchR.body.hits[0];
+          const projectR = await httpsGet(`https://api.modrinth.com/v2/project/${hit.project_id}`);
+          if (projectR.status === 200) {
+            const p = projectR.body;
+            modName = p.title;
+            const clientRequired = p.client_side === 'required' || p.client_side === 'optional';
+            const serverOk = p.server_side !== 'unsupported';
+            side = (clientRequired && !serverOk) ? 'client'
+                 : (!clientRequired && serverOk)  ? 'server'
+                 : 'both';
+
+            if (side === 'client') {
+              fs.rmSync(path.join(modsDir, file), { force: true });
+              action = 'deleted';
+              reason = `Client-only mod (server_side=${p.server_side})`;
+              pushLog(id, `[scan-and-clean] Deleted client-only mod: ${file} (${p.title})`, 'warn');
+            } else {
+              reason = `Side: ${side} (client_side=${p.client_side}, server_side=${p.server_side})`;
+            }
+          }
+        }
+      } catch (e) {
+        reason = `Error checking: ${e.message}`;
+      }
+
+      results.push({ file, modName, side, action, reason });
+    }
+
+    const deleted = results.filter(r => r.action === 'deleted').length;
+    pushActivity(`${processes[id].cfg.name}: scan-and-clean — ${deleted} client-only mod(s) removed`, deleted > 0 ? 'yellow' : 'blue');
+    res.json({ ok: true, scanned: files.length, deleted, results });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
