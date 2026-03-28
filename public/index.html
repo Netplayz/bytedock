@@ -457,6 +457,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex
         <div class="c-dots"><div class="c-dot c-dot-r"></div><div class="c-dot c-dot-y"></div><div class="c-dot c-dot-g"></div></div>
         <div class="c-title" id="c-title2">No container selected</div>
         <select class="c-select" id="c-select2" onchange="openConsole(this.value)"><option value="">— select container —</option></select>
+        <button id="clean-mods-btn" onclick="runScanAndClean(activeConsole)" title="Scan mods folder and delete any client-only mods" style="display:none;margin-left:auto;padding:4px 10px;font-size:11px;background:rgba(249,115,22,0.12);color:#fb923c;border:1px solid rgba(249,115,22,0.3);border-radius:6px;cursor:pointer;gap:5px;display:none;align-items:center;">
+          <i class="fa-solid fa-broom"></i> Clean Client Mods
+        </button>
+      </div>
+      <!-- Client-mod crash banner (shown automatically when detected in logs) -->
+      <div id="client-mod-crash-banner" style="display:none;background:rgba(239,68,68,0.1);border-bottom:1px solid rgba(239,68,68,0.3);padding:10px 16px;display:none;align-items:center;gap:10px;flex-wrap:wrap;">
+        <i class="fa-solid fa-triangle-exclamation" style="color:#f87171;flex-shrink:0;"></i>
+        <span style="font-size:12px;color:#fca5a5;flex:1;">Client-only mod detected in server logs — this will crash the server on startup.</span>
+        <button onclick="runScanAndClean(activeConsole)" style="padding:4px 12px;font-size:11px;background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.4);border-radius:6px;cursor:pointer;white-space:nowrap;">
+          <i class="fa-solid fa-broom"></i> Auto-remove client mods &amp; restart
+        </button>
+        <button onclick="this.parentElement.style.display='none'" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:0 4px;">✕</button>
       </div>
       <div class="console-body" id="c-body2" style="height:calc(100vh - 220px);"></div>
       <div class="console-in"><span class="c-prompt">$</span><input class="c-input" id="c-input2" placeholder="Select a running container first..." onkeydown="sendCmd2(event)" disabled/></div>
@@ -946,6 +958,7 @@ function handleWS(msg){
       if(!consoleLogs[msg.id])consoleLogs[msg.id]=[];
       consoleLogs[msg.id].push(msg.entry);
       if(consoleLogs[msg.id].length>2000)consoleLogs[msg.id].shift();
+      checkLogForClientModCrash(msg.entry, msg.id);
       if(activeConsole===msg.id){appendLog(msg.entry,'c-body');appendLog(msg.entry,'c-body2');}
       break;
     case 'stats':renderStats(msg.stats);break;
@@ -965,6 +978,7 @@ function handleWS(msg){
     case 'deleted':
       servers=servers.filter(s=>s.id!==msg.id);
       delete consoleLogs[msg.id];
+      delete _clientModCrashShown[msg.id];
       if(activeConsole===msg.id){activeConsole=null;clearConsoleUI();}
       renderServers();updateSelects();
       break;
@@ -1043,6 +1057,7 @@ function serverRow(s){
       ${!offline?`<div class="act" title="Restart" onclick="srvAction('${s.id}','restart')"><i class="fa-solid fa-rotate-right"></i></div>`:''}
       <div class="act act-upload" title="Upload Files" onclick="openUploadModal('${s.id}')"><i class="fa-solid fa-file-arrow-up"></i></div>
       <div class="act act-console" title="Console" onclick="openConsole('${s.id}')"><i class="fa-solid fa-terminal"></i></div>
+      <div class="act" title="Scan &amp; remove client-only mods" onclick="runScanAndClean('${s.id}')" style="color:#f97316;" ><i class="fa-solid fa-broom"></i></div>
       <div class="act act-edit" title="Edit" onclick="openEditModal('${s.id}')"><i class="fa-solid fa-pen"></i></div>
       <div class="act act-del" title="Delete" onclick="openDelModal('${s.id}')"><i class="fa-solid fa-trash"></i></div>
     </div>
@@ -1090,7 +1105,24 @@ async function openConsole(id){
     e.disabled=!online;
     e.placeholder=online?'Type a command...':'Container is not running';
   });
+
+  // Show/hide crash banner based on whether this server already has the crash in its logs
+  const banner = document.getElementById('client-mod-crash-banner');
+  const cleanBtn = document.getElementById('clean-mods-btn');
+  if (banner) banner.style.display = _clientModCrashShown[id] ? 'flex' : 'none';
+  if (cleanBtn) cleanBtn.style.display = 'flex';
+
   const logs=consoleLogs[id]||(await api('GET',`/api/servers/${id}/logs`).then(l=>{consoleLogs[id]=l;return l;}).catch(()=>[]));
+
+  // Check existing logs for the crash pattern
+  if (banner && !_clientModCrashShown[id]) {
+    const hasCrash = (logs||[]).some(e => CLIENT_MOD_CRASH_RE.test(e.line));
+    if (hasCrash) {
+      _clientModCrashShown[id] = true;
+      banner.style.display = 'flex';
+    }
+  }
+
   ['c-body','c-body2'].forEach(bid=>{
     const body=document.getElementById(bid);if(!body)return;
     body.innerHTML='';
@@ -1117,8 +1149,74 @@ function _al(entry,el){
   d.innerHTML=`<span class="c-ts">[${entry.ts}]</span> <span class="${cls}">[${lbl}]</span> ${esc(entry.line)}`;
   el.appendChild(d);
 }
+// ── SCAN & CLEAN CLIENT MODS ──
+async function runScanAndClean(id) {
+  if (!id) { toast('No container selected', 'error'); return; }
+  const srv = servers.find(s => s.id === id);
+  const name = srv ? srv.name : id;
+
+  const confirmed = confirm(
+    `Scan "${name}" mods folder and automatically delete any client-only mods?\n\n` +
+    `This will:\n` +
+    `  • Scan every .jar in the mods folder\n` +
+    `  • Check each mod against Modrinth\n` +
+    `  • Delete any that are client-side only\n\n` +
+    `Mods that can't be identified are left untouched.`
+  );
+  if (!confirmed) return;
+
+  toast('Scanning mods folder…', 'info');
+
+  try {
+    const res = await api('POST', `/api/servers/${id}/mods/scan-and-clean`, { modsPath: 'mods' });
+    if (!res.ok) { toast(res.error || 'Scan failed', 'error'); return; }
+
+    const { scanned, deleted, results } = res;
+
+    if (deleted === 0) {
+      toast(`Scanned ${scanned} mod(s) — no client-only mods found`, 'success');
+      return;
+    }
+
+    // Show which mods were removed
+    const names = results.filter(r => r.action === 'deleted').map(r => r.modName || r.file).join(', ');
+    toast(`Removed ${deleted} client-only mod(s): ${names}`, 'success');
+
+    // Hide the crash banner if visible
+    const banner = document.getElementById('client-mod-crash-banner');
+    if (banner) banner.style.display = 'none';
+
+    // Offer to restart the server
+    if (srv && srv.status !== 'online') {
+      if (confirm(`Deleted ${deleted} client-only mod(s). Restart the server now?`)) {
+        await srvAction(id, 'start');
+      }
+    } else if (srv && srv.status === 'online') {
+      if (confirm(`Deleted ${deleted} client-only mod(s). Restart to apply changes?`)) {
+        await srvAction(id, 'restart');
+      }
+    }
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+// Detect client-mod crash pattern in logs and show the banner
+const CLIENT_MOD_CRASH_RE = /invalid dist DEDICATED_SERVER|Attempted to load class.*for invalid dist/i;
+let _clientModCrashShown = {};
+
+function checkLogForClientModCrash(entry, serverId) {
+  if (!serverId || _clientModCrashShown[serverId]) return;
+  if (CLIENT_MOD_CRASH_RE.test(entry.line)) {
+    _clientModCrashShown[serverId] = true;
+    if (activeConsole === serverId) {
+      const banner = document.getElementById('client-mod-crash-banner');
+      if (banner) banner.style.display = 'flex';
+    }
+  }
+}
+
 async function sendCmd(e){
-  if(e.key!=='Enter')return;
   const i=document.getElementById('c-input');
   const cmd=i.value.trim();if(!cmd||!activeConsole)return;
   const res=await api('POST',`/api/servers/${activeConsole}/command`,{command:cmd});
