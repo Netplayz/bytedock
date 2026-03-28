@@ -591,6 +591,25 @@ All endpoints return a consistent error shape:
 
 All mod endpoints require the `X-Panel-Password` header (if a password is configured).
 
+### CurseForge API Key
+
+CurseForge endpoints require an API key configured in `config.json`:
+
+```json
+{
+  "panel": {
+    "curseforgeApiKey": "YOUR_KEY_HERE"
+  }
+}
+```
+
+To get a key:
+1. Go to **https://console.curseforge.com** and sign in or create a free account
+2. Click **Create API Key**, name it anything, and copy it
+3. Paste it into `config.json` and restart ByteDock
+
+Modrinth endpoints work without any API key.
+
 ### Search mods
 
 ```

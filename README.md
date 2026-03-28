@@ -76,13 +76,30 @@ Edit `config.json` before starting:
   "panel": {
     "port": 2999,
     "host": "0.0.0.0",
-    "password": "yourpassword"
+    "password": "yourpassword",
+    "curseforgeApiKey": ""
   },
   "servers": []
 }
 ```
 
 Servers are added and saved automatically through the UI. The `servers` array is managed by the panel — you don't need to edit it manually.
+
+### CurseForge API Key
+
+A CurseForge API key is required to search and install mods from CurseForge. Modrinth works without any key.
+
+1. Go to **https://console.curseforge.com** and sign in (or create a free account)
+2. Click **Create API Key**, give it a name, and copy the key
+3. Paste it into `config.json` under `panel.curseforgeApiKey`:
+
+```json
+"curseforgeApiKey": "YOUR_KEY_HERE"
+```
+
+4. Save the file and restart ByteDock
+
+> If you leave `curseforgeApiKey` empty, CurseForge search and install endpoints will return an error — Modrinth will continue to work normally.
 
 ---
 
