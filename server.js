@@ -1139,6 +1139,12 @@ app.get('/api/mods/side', auth, async (req, res) => {
 // This only works for mods that exist on Modrinth and whose filename can be
 // matched to a version. Mods it cannot identify are left untouched (safe=true).
 
+// ── SCAN & CLEAN CLIENT MODS ──
+// Strategy 1 (primary): Parse the server's own crash logs for
+//   "Attempted to load class ... for invalid dist DEDICATED_SERVER"
+//   These lines name the exact mod jar that failed — no API required.
+// Strategy 2 (fallback): Query Modrinth by filename for any jars not caught by logs.
+
 app.post('/api/servers/:id/mods/scan-and-clean', auth, async (req, res) => {
   const { id } = req.params;
   const { modsPath = 'mods' } = req.body;
@@ -1152,15 +1158,80 @@ app.post('/api/servers/:id/mods/scan-and-clean', auth, async (req, res) => {
     const files = fs.readdirSync(modsDir).filter(f => f.endsWith('.jar'));
     const results = [];
 
+    // ── Strategy 1: detect from crash logs ──
+    // Forge logs the failing mod file path in the mod list section, and the error
+    // "Attempted to load class X for invalid dist DEDICATED_SERVER" nearby.
+    // We look for lines like:
+    //   "Mod File: /data/mods/smoothswapping-0.9.2-1.19.2-forge.jar"
+    // followed (anywhere in the log window) by the dist error.
+    const logs = processes[id].logs || [];
+    const crashedJars = new Set();
+
+    // Collect all mod files mentioned near dist errors
+    // Forge groups them: "-- MOD name --" → "Mod File: /path/to/jar" → error
+    let currentModFile = null;
+    for (const entry of logs) {
+      const line = entry.line || '';
+
+      const modFileMatch = line.match(/Mod File:\s*(.+\.jar)/i);
+      if (modFileMatch) {
+        currentModFile = path.basename(modFileMatch[1].trim());
+      }
+
+      if (/invalid dist DEDICATED_SERVER/i.test(line) && currentModFile) {
+        crashedJars.add(currentModFile);
+        currentModFile = null;
+      }
+    }
+
+    // Also catch the summary lines: "smoothswapping has failed to load correctly"
+    // paired with the dist error in the same log session
+    const failedModIds = new Set();
+    for (const entry of logs) {
+      const line = entry.line || '';
+      const failMatch = line.match(/(\w+) has failed to load correctly/i);
+      if (failMatch) failedModIds.add(failMatch[1].toLowerCase());
+    }
+
+    // Match failed mod IDs to actual jar filenames
     for (const file of files) {
+      const lower = file.toLowerCase();
+      for (const modId of failedModIds) {
+        if (lower.includes(modId)) {
+          crashedJars.add(file);
+        }
+      }
+    }
+
+    // ── Delete crash-detected jars immediately (no API needed) ──
+    const logDeleted = new Set();
+    for (const jarFile of crashedJars) {
+      if (files.includes(jarFile)) {
+        const fullPath = path.join(modsDir, jarFile);
+        try {
+          fs.rmSync(fullPath, { force: true });
+          logDeleted.add(jarFile);
+          pushLog(id, `[scan-and-clean] Deleted client-only mod (crash log): ${jarFile}`, 'warn');
+        } catch (e) {
+          pushLog(id, `[scan-and-clean] Failed to delete ${jarFile}: ${e.message}`, 'err');
+        }
+      }
+    }
+
+    // ── Strategy 2: Modrinth API check for remaining jars ──
+    for (const file of files) {
+      if (logDeleted.has(file)) {
+        results.push({ file, modName: file, side: 'client', action: 'deleted', reason: 'Crashed server with invalid dist DEDICATED_SERVER error' });
+        continue;
+      }
+
       let action = 'kept';
       let side = 'unknown';
       let modName = file;
       let reason = 'Could not identify mod';
 
       try {
-        // Search Modrinth by filename (strip version info for a cleaner query)
-        const query = file.replace(/[-_][0-9].*$/, '').replace(/-/g, ' ');
+        const query = file.replace(/[-_][0-9].*$/, '').replace(/[-_]/g, ' ').trim();
         const searchR = await httpsGet(
           `https://api.modrinth.com/v2/search?query=${encodeURIComponent(query)}&facets=${encodeURIComponent(JSON.stringify([['project_type:mod']]))}&limit=5`
         );
@@ -1171,24 +1242,21 @@ app.post('/api/servers/:id/mods/scan-and-clean', auth, async (req, res) => {
           if (projectR.status === 200) {
             const p = projectR.body;
             modName = p.title;
-            const clientRequired = p.client_side === 'required' || p.client_side === 'optional';
             const serverOk = p.server_side !== 'unsupported';
-            side = (clientRequired && !serverOk) ? 'client'
-                 : (!clientRequired && serverOk)  ? 'server'
-                 : 'both';
+            side = (!serverOk) ? 'client' : 'both';
 
             if (side === 'client') {
               fs.rmSync(path.join(modsDir, file), { force: true });
               action = 'deleted';
               reason = `Client-only mod (server_side=${p.server_side})`;
-              pushLog(id, `[scan-and-clean] Deleted client-only mod: ${file} (${p.title})`, 'warn');
+              pushLog(id, `[scan-and-clean] Deleted client-only mod (Modrinth): ${file} (${p.title})`, 'warn');
             } else {
-              reason = `Side: ${side} (client_side=${p.client_side}, server_side=${p.server_side})`;
+              reason = `Side: ${side} (server_side=${p.server_side})`;
             }
           }
         }
       } catch (e) {
-        reason = `Error checking: ${e.message}`;
+        reason = `Modrinth check failed: ${e.message}`;
       }
 
       results.push({ file, modName, side, action, reason });
