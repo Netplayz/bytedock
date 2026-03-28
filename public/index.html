@@ -753,6 +753,35 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex
   </div>
 </div>
 
+<!-- FORGE MODPACK PROMPT MODAL -->
+<div class="overlay" id="forge-modpack-modal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">
+      <i class="fa-solid fa-fire-flame-curved" style="color:#f97316;font-size:16px;margin-right:8px;"></i>
+      Forge Detected — Install a Modpack?
+    </div>
+    <div class="modal-sub" style="margin-bottom:16px;">
+      You selected <strong id="forge-prompt-loader" style="color:#f97316;"></strong> as the server type.
+      Would you like to install a modpack now, or just deploy a bare Forge server?
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;">
+      <button class="btn btn-primary" style="justify-content:center;gap:10px;padding:12px 16px;" onclick="forgePromptInstallModpack()">
+        <i class="fa-solid fa-box-archive"></i>
+        Yes — pick a modpack to install
+      </button>
+      <button class="btn btn-secondary" style="justify-content:center;gap:10px;padding:12px 16px;" onclick="forgePromptSkip()">
+        <i class="fa-solid fa-server"></i>
+        No — deploy bare Forge server
+      </button>
+    </div>
+
+    <div style="font-size:11px;color:var(--dim);line-height:1.6;border-top:1px solid var(--border);padding-top:12px;">
+      You can always install a modpack later from the <strong>Find Mods → Modpacks</strong> tab on any running server.
+    </div>
+  </div>
+</div>
+
 <!-- MOD FINDER MODAL -->
 <div class="overlay" id="mod-modal" onclick="if(event.target===this)closeModModal()">
   <div class="modal mod-modal">
@@ -1271,6 +1300,71 @@ function clearForm(){
   document.getElementById('egg-vars').innerHTML='';
 }
 
+// ── FORGE MODPACK PROMPT ──
+// Holds the payload while we ask the user if they want a modpack
+let _pendingForgePayload = null;
+
+function isForgeType(env) {
+  const t = (env && env.TYPE || '').toUpperCase();
+  return t === 'FORGE' || t === 'NEOFORGE';
+}
+
+function openForgeModpackPrompt(payload) {
+  _pendingForgePayload = payload;
+  const loader = (payload.env && payload.env.TYPE) || 'Forge';
+  document.getElementById('forge-prompt-loader').textContent = loader;
+  document.getElementById('forge-modpack-modal').classList.add('open');
+}
+
+function closeForgeModpackPrompt() {
+  document.getElementById('forge-modpack-modal').classList.remove('open');
+}
+
+async function forgePromptSkip() {
+  // Deploy bare server without a modpack
+  closeForgeModpackPrompt();
+  await _deployServer(_pendingForgePayload);
+  _pendingForgePayload = null;
+}
+
+async function forgePromptInstallModpack() {
+  // First deploy the server, then open the modpacks tab in Find Mods
+  closeForgeModpackPrompt();
+  const payload = _pendingForgePayload;
+  _pendingForgePayload = null;
+
+  const res = await _deployServer(payload);
+  if (!res || !res.ok) return; // _deployServer shows the toast on failure
+
+  // Open the mod modal on the modpacks tab, pre-filtered to the detected loader
+  const loader = (payload.env && payload.env.TYPE || '').toLowerCase(); // "forge" or "neoforge"
+  fmServerId = payload.id;
+
+  // Pre-set loader filter to match the server type
+  const loaderEl = document.getElementById('mod-loader-filter');
+  if (loaderEl) {
+    const match = [...loaderEl.options].find(o => o.value === loader);
+    if (match) loaderEl.value = loader;
+  }
+
+  openModModal(payload.id);
+  // Switch straight to the modpacks tab
+  modSwitchSource('modpacks');
+  toast('Server deployed! Pick a modpack to install.', 'success');
+}
+
+// ── INTERNAL: perform the actual API create call ──
+async function _deployServer(payload) {
+  const res = await api('POST', '/api/servers', payload);
+  if (res.ok) {
+    closeAddModal();
+    refreshAll();
+  } else {
+    toast(res.error || 'Failed', 'error');
+  }
+  return res;
+}
+
 async function saveServer(){
   const name=document.getElementById('f-name').value.trim();
   const color=document.getElementById('f-color').value;
@@ -1326,9 +1420,14 @@ async function saveServer(){
     else toast(res.error||'Failed','error');
   } else {
     payload.id=name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'')+'-'+Date.now().toString(36);
-    const res=await api('POST','/api/servers',payload);
-    if(res.ok){toast(`${name} created`,'success');closeAddModal();refreshAll();}
-    else toast(res.error||'Failed','error');
+
+    // If Forge or NeoForge is selected on a Minecraft egg, offer a modpack prompt
+    if(selectedEgg && selectedEgg._id === 'minecraft-java' && isForgeType(payload.env)){
+      openForgeModpackPrompt(payload);
+      return;
+    }
+
+    await _deployServer(payload);
   }
 }
 
@@ -1542,7 +1641,8 @@ function esc(s){
 let modSource = 'modrinth';
 let mpSubSource = 'modrinth';
 
-function openModModal() {
+function openModModal(serverId) {
+  if (serverId) fmServerId = serverId;
   if (!fmServerId) { toast('Select a container in File Manager first', 'error'); return; }
   const srv = servers.find(s => s.id === fmServerId);
   document.getElementById('mod-modal-sub').textContent =
