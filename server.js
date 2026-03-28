@@ -877,7 +877,7 @@ function httpsDownload(url, ua = 'ByteDock/2.2', maxRedirects = 5) {
   });
 }
 
-
+app.get('/api/mods/search', auth, async (req, res) => {
   const { q = '', source = 'modrinth', loader = '', version = '' } = req.query;
 
   try {
