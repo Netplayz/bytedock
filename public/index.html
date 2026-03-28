@@ -1756,14 +1756,6 @@ async function modpackInstall(encodedSlug, encodedName, source, btn) {
   }
 }
 
-  } catch (err) {
-    toast(err.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Search';
-  }
-}
-
 function modCard(m) {
   const dlFmt = m.downloads >= 1e6 ? (m.downloads/1e6).toFixed(1)+'M' : m.downloads >= 1e3 ? (m.downloads/1e3).toFixed(0)+'K' : String(m.downloads||0);
   const iconHtml = m.icon
