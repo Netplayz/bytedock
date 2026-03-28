@@ -2,7 +2,8 @@
   "panel": {
     "port": 2999,
     "host": "0.0.0.0",
-    "password": "changeme"
+    "password": "changeme",
+    "curseforgeApiKey": ""
   },
   "servers": []
 }
