@@ -312,6 +312,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex
 .mod-tab{flex:1;padding:7px;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;color:var(--dim);text-align:center;transition:all 0.15s;border:none;background:none;}
 .mod-tab.active{background:rgba(79,70,229,0.2);color:#a5b4fc;}
 .mod-tab.cf.active{background:rgba(245,158,11,0.15);color:#fbbf24;}
+.mod-tab.mp{color:#c084fc;}
+.mod-tab.mp.active{background:rgba(192,132,252,0.15);color:#c084fc;}
 .mod-filters{display:flex;gap:8px;margin-bottom:14px;align-items:center;}
 .mod-search-inp{flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:9px 13px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none;transition:border-color 0.15s;}
 .mod-search-inp:focus{border-color:var(--primary);}
@@ -775,6 +777,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex
         <i class="fa-solid fa-fire" style="color:#f97316;margin-right:5px;"></i>CurseForge
         <span style="font-size:9px;background:rgba(249,115,22,0.15);color:#f97316;padding:1px 5px;border-radius:3px;margin-left:5px;font-weight:700;">KEY REQ</span>
       </button>
+      <button class="mod-tab mp" id="mod-tab-modpacks" onclick="modSwitchSource('modpacks')">
+        <i class="fa-solid fa-box-archive" style="color:#c084fc;margin-right:5px;"></i>Modpacks
+        <span style="font-size:9px;background:rgba(192,132,252,0.15);color:#c084fc;padding:1px 5px;border-radius:3px;margin-left:5px;font-weight:700;">FORGE/FABRIC</span>
+      </button>
     </div>
 
     <!-- CurseForge notice -->
@@ -782,6 +788,21 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex
       <i class="fa-solid fa-key" style="color:#fbbf24;margin-right:6px;"></i>
       CurseForge requires an API key. Add <code style="font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">"curseforgeApiKey": "YOUR_KEY"</code> inside the <code style="font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">"panel"</code> object in <code style="font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">config.json</code>, then restart ByteDock.
       <a href="https://console.curseforge.com/" target="_blank" style="margin-left:6px;">Get a key →</a>
+    </div>
+
+    <!-- Modpack notice -->
+    <div class="mod-cf-notice hidden" id="mod-mp-notice" style="border-color:rgba(192,132,252,0.3);background:rgba(192,132,252,0.07);">
+      <i class="fa-solid fa-triangle-exclamation" style="color:#fbbf24;margin-right:6px;"></i>
+      <span>Applying a modpack <strong>reconfigures &amp; restarts</strong> this container. The server must use the <code style="font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;">itzg/minecraft-server</code> image. Manually-installed mods will be replaced on next start.</span>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span style="color:var(--dim);font-size:11px;">Source:</span>
+        <button class="mod-tab active" id="mp-sub-modrinth" onclick="mpSwitchSub('modrinth')" style="padding:3px 10px;font-size:11px;">
+          <i class="fa-solid fa-leaf" style="color:#34d399;margin-right:4px;"></i>Modrinth
+        </button>
+        <button class="mod-tab cf" id="mp-sub-curseforge" onclick="mpSwitchSub('curseforge')" style="padding:3px 10px;font-size:11px;">
+          <i class="fa-solid fa-fire" style="color:#f97316;margin-right:4px;"></i>CurseForge
+        </button>
+      </div>
     </div>
 
     <!-- Search filters -->
@@ -1519,6 +1540,7 @@ function esc(s){
 
 // ── MOD FINDER ──
 let modSource = 'modrinth';
+let mpSubSource = 'modrinth';
 
 function openModModal() {
   if (!fmServerId) { toast('Select a container in File Manager first', 'error'); return; }
@@ -1531,14 +1553,39 @@ function closeModModal() { document.getElementById('mod-modal').classList.remove
 
 function modSwitchSource(src) {
   modSource = src;
-  document.getElementById('mod-tab-modrinth').className = 'mod-tab' + (src === 'modrinth' ? ' active' : '');
+  document.getElementById('mod-tab-modrinth').className  = 'mod-tab'    + (src === 'modrinth'  ? ' active' : '');
   document.getElementById('mod-tab-curseforge').className = 'mod-tab cf' + (src === 'curseforge' ? ' active' : '');
+  document.getElementById('mod-tab-modpacks').className   = 'mod-tab mp' + (src === 'modpacks'   ? ' active' : '');
   document.getElementById('mod-cf-notice').classList.toggle('hidden', src !== 'curseforge');
+  document.getElementById('mod-mp-notice').classList.toggle('hidden', src !== 'modpacks');
+  // Hide destination path row for modpacks — it's not applicable
+  document.querySelector('.mod-dest-row').style.display = src === 'modpacks' ? 'none' : '';
+  document.getElementById('mod-search-inp').placeholder = src === 'modpacks' ? 'Search modpacks…' : 'Search mods…';
   document.getElementById('mod-results').classList.add('hidden');
   document.getElementById('mod-empty-state').classList.remove('hidden');
+  document.getElementById('mod-empty-state').innerHTML =
+    (src === 'modpacks')
+      ? '<i class="fa-solid fa-box-archive" style="font-size:32px;opacity:0.2;"></i><span>Search for modpacks to get started</span>'
+      : '<i class="fa-solid fa-puzzle-piece" style="font-size:32px;opacity:0.2;"></i><span>Search for mods to get started</span>';
 }
 
+function mpSwitchSub(sub) {
+  mpSubSource = sub;
+  document.getElementById('mp-sub-modrinth').className   = 'mod-tab'    + (sub === 'modrinth'   ? ' active' : '');
+  document.getElementById('mp-sub-curseforge').className = 'mod-tab cf' + (sub === 'curseforge' ? ' active' : '');
+  // Clear results when switching sub-source
+  document.getElementById('mod-results').classList.add('hidden');
+  document.getElementById('mod-results').innerHTML = '';
+  document.getElementById('mod-empty-state').classList.remove('hidden');
+  document.getElementById('mod-empty-state').innerHTML =
+    '<i class="fa-solid fa-box-archive" style="font-size:32px;opacity:0.2;"></i><span>Search for modpacks to get started</span>';
+}
+
+
 async function modSearch() {
+  // Delegate to modpack search when in modpacks tab
+  if (modSource === 'modpacks') { await modpackSearch(); return; }
+
   const q = document.getElementById('mod-search-inp').value.trim();
   const loader = document.getElementById('mod-loader-filter').value;
   const version = document.getElementById('mod-version-filter').value.trim();
@@ -1574,6 +1621,141 @@ async function modSearch() {
     const grid = document.getElementById('mod-results');
     grid.innerHTML = res.mods.map(m => modCard(m)).join('');
     grid.classList.remove('hidden');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Search';
+  }
+}
+
+// ── MODPACK SEARCH ──
+async function modpackSearch() {
+  const q       = document.getElementById('mod-search-inp').value.trim();
+  const loader  = document.getElementById('mod-loader-filter').value;
+  const version = document.getElementById('mod-version-filter').value.trim();
+  const source  = 'modpack-' + mpSubSource;
+  const btn     = document.getElementById('mod-search-btn');
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Searching…';
+
+  document.getElementById('mod-empty-state').classList.add('hidden');
+  document.getElementById('mod-results').classList.add('hidden');
+  document.getElementById('mod-results').innerHTML = '';
+
+  try {
+    const params = new URLSearchParams({ q, source });
+    if (loader)  params.set('loader', loader);
+    if (version) params.set('version', version);
+    const res = await api('GET', `/api/mods/search?${params}`);
+
+    if (!res.ok) {
+      document.getElementById('mod-empty-state').innerHTML =
+        `<i class="fa-solid fa-triangle-exclamation" style="font-size:28px;color:var(--red);opacity:0.6;"></i><span style="color:var(--red);">${esc(res.error)}</span>`;
+      document.getElementById('mod-empty-state').classList.remove('hidden');
+      return;
+    }
+
+    if (!res.mods.length) {
+      document.getElementById('mod-empty-state').innerHTML =
+        '<i class="fa-solid fa-box-archive" style="font-size:28px;opacity:0.2;"></i><span>No modpacks found. Try a different search.</span>';
+      document.getElementById('mod-empty-state').classList.remove('hidden');
+      return;
+    }
+
+    const grid = document.getElementById('mod-results');
+    grid.innerHTML = res.mods.map(m => modpackCard(m)).join('');
+    grid.classList.remove('hidden');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Search';
+  }
+}
+
+function modpackCard(m) {
+  const dlFmt = m.downloads >= 1e6 ? (m.downloads/1e6).toFixed(1)+'M' : m.downloads >= 1e3 ? (m.downloads/1e3).toFixed(0)+'K' : String(m.downloads||0);
+  const iconHtml = m.icon
+    ? `<img class="mod-card-icon" src="${esc(m.icon)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+       <div class="mod-card-icon-fallback" style="display:none;"><i class="fa-solid fa-box-archive"></i></div>`
+    : `<div class="mod-card-icon-fallback"><i class="fa-solid fa-box-archive"></i></div>`;
+  const tags = (m.categories||[]).slice(0,3).map(c=>`<span class="mod-card-tag">${esc(c)}</span>`).join('');
+  // Show latest MC version badge if available
+  const latestVer = (m.game_versions||[]).slice(-1)[0];
+  const verBadge  = latestVer ? `<span class="mod-card-tag" style="background:rgba(192,132,252,0.12);color:#c084fc;">${esc(latestVer)}</span>` : '';
+  const encodedSlug = encodeURIComponent(m.slug||m.id);
+  const encodedName = encodeURIComponent(m.name);
+  return `<div class="mod-card" id="modcard-${esc(m.id)}" style="border-color:rgba(192,132,252,0.15);">
+    <div class="mod-card-head">
+      ${iconHtml}
+      <div style="min-width:0;">
+        <div class="mod-card-title">${esc(m.name)}</div>
+        <div class="mod-card-author">by ${esc(m.author||'unknown')}</div>
+      </div>
+    </div>
+    <div class="mod-card-desc">${esc(m.description||'')}</div>
+    <div class="mod-card-footer">
+      <div>
+        <div class="mod-card-tags">${tags}${verBadge}</div>
+        <div class="mod-card-dl" style="margin-top:4px;"><i class="fa-solid fa-download" style="font-size:9px;"></i> ${dlFmt}</div>
+      </div>
+      <button class="mod-install-btn" id="modbtn-${esc(m.id)}"
+        style="background:rgba(192,132,252,0.12);color:#c084fc;border-color:rgba(192,132,252,0.3);"
+        onclick="modpackInstall('${encodedSlug}','${encodedName}','${esc(m.source)}',this)">
+        <i class="fa-solid fa-bolt"></i> Apply
+      </button>
+    </div>
+  </div>`;
+}
+
+async function modpackInstall(encodedSlug, encodedName, source, btn) {
+  const slug    = decodeURIComponent(encodedSlug);
+  const name    = decodeURIComponent(encodedName);
+  const version = document.getElementById('mod-version-filter').value.trim() || '';
+
+  if (!fmServerId) { toast('Select a container in File Manager first', 'error'); return; }
+
+  const confirmed = confirm(
+    `Apply modpack "${name}" to this server?\n\n` +
+    `⚠ This will:\n` +
+    `  • Set the container TYPE env var to use the modpack loader\n` +
+    `  • Restart the container (30–120s downtime while it downloads)\n` +
+    `  • Replace any manually-added mods on next start\n\n` +
+    `Continue?`
+  );
+  if (!confirmed) return;
+
+  btn.disabled = true;
+  btn.className = 'mod-install-btn installing';
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+  try {
+    const res = await fetch(`/api/servers/${fmServerId}/modpacks/install`, {
+      method: 'POST',
+      headers: { 'x-panel-password': PW, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, modpackSlug: slug, modpackName: name, version }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.className = 'mod-install-btn done';
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Applied';
+      toast(`Modpack "${name}" applied — server is restarting`, 'success');
+    } else {
+      toast(data.error || 'Modpack install failed', 'error');
+      btn.disabled = false;
+      btn.className = 'mod-install-btn';
+      btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Apply';
+    }
+  } catch (err) {
+    toast(err.message, 'error');
+    btn.disabled = false;
+    btn.className = 'mod-install-btn';
+    btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Apply';
+  }
+}
+
   } catch (err) {
     toast(err.message, 'error');
   } finally {
